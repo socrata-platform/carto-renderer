@@ -14,8 +14,6 @@ import collections
 import base64
 import logging.config
 
-from subprocess import Popen, PIPE
-
 from carto_renderer.errors import BadRequest, JsonKeyError, ServiceError
 from carto_renderer.version import SEMANTIC
 
@@ -31,42 +29,6 @@ GEOM_TYPES = {
 BASE_ZOOM = 29
 TILE_ZOOM_FACTOR = 16
 LOG_ENV = {'X-Socrata-RequestId': None}
-
-
-class CssRenderer(object):
-    """
-    Class to wrap talking to a renderer subprocess.
-    """
-    def __init__(self):
-        self.renderer = None
-        self.ensure_renderer()
-
-    def ensure_renderer(self):
-        """
-        Start a renderer subprocess if one is not alive.
-
-        Otherwise do nothing.
-        """
-        if not self.is_alive():
-            self.renderer = Popen(['node', 'style'],
-                                  stdin=PIPE,
-                                  stdout=PIPE,
-                                  stderr=PIPE)
-
-    def is_alive(self):
-        """True if the rendrerer subprocess is alive, False otherwise."""
-        return self.renderer and self.renderer.poll() is None
-
-    def render_css(self, carto_css):
-        """
-        Transform Carto CSS into Mapnik XML.
-
-        Carto CSS must be formatted on a single line, ending in a line break.
-        """
-        self.ensure_renderer()
-
-        self.renderer.stdin.write(carto_css)
-        return self.renderer.stdout.readline()
 
 
 def build_wkt(geom_code, geometries):
@@ -217,32 +179,6 @@ class VersionHandler(BaseHandler):
         self.finish()
 
 
-class StyleHandler(BaseHandler):
-    # pylint: disable=abstract-method
-    """
-    Convert Carto CSS passed in via the `$style` query param
-    into Mapnik XML.
-    """
-    def initialize(self, css_renderer):
-        # pylint: disable=arguments-differ
-        """Magic Tornado replacement for __init__."""
-        self.css_renderer = css_renderer
-
-    def post(self):
-        """
-        Convert Carto CSS passed in via the `$style` query param
-        into Mapnik XML.
-        """
-        jbody = self.extract_jbody()
-
-        if 'style' in jbody:
-            self.write(self.css_renderer.render_css(jbody['style']))
-            self.finish()
-        else:
-
-            raise JsonKeyError('style', jbody)
-
-
 class RenderHandler(BaseHandler):
     # pylint: disable=abstract-method
     """
@@ -251,11 +187,6 @@ class RenderHandler(BaseHandler):
     Expects a JSON blob with 'style', 'zoom', and 'bpbf' values.
     """
     keys = ['bpbf', 'zoom', 'style']
-
-    def initialize(self, css_renderer):
-        # pylint: disable=arguments-differ
-        """Magic Tornado replacement for __init__."""
-        self.css_renderer = css_renderer
 
     def post(self):
         """
@@ -281,7 +212,7 @@ class RenderHandler(BaseHandler):
                                  request_body=jbody)
             pbf = base64.b64decode(jbody['bpbf'])
             tile = mapbox_vector_tile.decode(pbf)
-            xml = self.css_renderer.render_css(jbody['style'])
+            xml = jbody['style']  # TODO: Actually render!
 
             logger.info("zoom: %d, len(pbf): %d, len(xml): %d",
                         zoom,
@@ -307,15 +238,10 @@ def main():  # pragma: no cover
     args = parser.parse_args()
     logging.config.fileConfig(args.log_config_file)
 
-    handler_opts = {
-        'css_renderer': CssRenderer()
-    }
-
     routes = [
         url(r'/', RedirectHandler, {'url': '/version'}),
         url(r'/version', VersionHandler),
-        url(r'/style', StyleHandler, handler_opts),
-        url(r'/render', RenderHandler, handler_opts),
+        url(r'/render', RenderHandler),
     ]
 
     app = Application(routes)

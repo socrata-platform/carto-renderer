@@ -1,14 +1,24 @@
 #!/bin/bash
 
-set -ev
+set -ve
 
 # Change to the project root.
 cd "$(git rev-parse --show-toplevel 2>/dev/null)"
 
-REQ_FILE='requirements.txt'
+MAPNIK_DIR=$(dirname "$(python -c 'import mapnik; print(mapnik.__file__)')")
+if [ ! -d "venv" ]; then
+    virtualenv venv
+fi
+. venv/bin/activate
+
+if [ ! -d venv/lib/python2.7/site-packages/mapnik ]; then
+    ln -s "$MAPNIK_DIR" venv/lib/python2.7/site-packages/
+fi
+
+DEV_FILE='dev-requirements.txt'
 FROZEN_FILE='frozen.txt'
 
-REQS=$(sed 's/#.*//' "${REQ_FILE}" | grep -v '^$' | tr "\\n" ' ' | sed -r 's/ +$//')
-REQS="(${REQS// /)|(})"
+REQS=($(egrep --invert-match '# ?test' "${DEV_FILE}" | tr "\\n" ' '))
+pip install --upgrade "${REQS[@]}"
 
-pip freeze -r "${REQ_FILE}" | egrep "${REQS}" > "${FROZEN_FILE}"
+pip freeze > "${FROZEN_FILE}"

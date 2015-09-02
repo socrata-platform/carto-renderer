@@ -21,7 +21,7 @@ except NameError:               # pragma: no cover
     unicode = str
 
 from carto_renderer import service, errors
-from carto_renderer.service import CssRenderer, GEOM_TYPES, build_wkt
+from carto_renderer.service import GEOM_TYPES, build_wkt
 
 POINT_LISTS = lists(integers(), 2, 2, 2)
 SHELL_LISTS = lists(POINT_LISTS, 1, 10, 100)
@@ -87,21 +87,9 @@ class VersionStrHandler(service.VersionHandler, StringHandler):
     pass
 
 
-class StyleStrHandler(service.StyleHandler, StringHandler):
-    def __init__(self, renderer=None):
-        StringHandler.__init__(self, css_renderer=renderer)
-        self.jbody = None
-
-    def extract_jbody(self):
-        if self.jbody:
-            return self.jbody
-        else:
-            return service.StyleHandler.extract_jbody(self)
-
-
 class RenderStrHandler(service.RenderHandler, StringHandler):
-    def __init__(self, renderer=None):
-        StringHandler.__init__(self, css_renderer=renderer)
+    def __init__(self):
+        StringHandler.__init__(self)
         self.jbody = None
 
     def extract_jbody(self):
@@ -109,28 +97,6 @@ class RenderStrHandler(service.RenderHandler, StringHandler):
             return self.jbody
         else:
             return service.RenderHandler.extract_jbody(self)
-
-
-def test_render_css():
-    expected = '<?xml version="1.0" encoding="utf-8"?><!DOCTYPE Map[]><Map><Style name="main" filter-mode="first"><Rule><MarkersSymbolizer stroke="#0000cc" width="1" /></Rule></Style><Layer name="main"><StyleName>main</StyleName></Layer></Map>\n'  # noqa
-    oneline = "#main{marker-line-color:#00C;marker-width:1}"
-    multiline = """#main{
-    marker-line-color:#00C;
-    marker-width:1
-    } """
-
-    renderer = CssRenderer()
-    assert renderer.render_css(oneline) == expected
-    assert renderer.render_css(multiline) == expected
-
-
-def test_ensure_renderer():
-    renderer = CssRenderer()
-    expected = renderer.renderer
-    renderer.ensure_renderer()
-
-    actual = renderer.renderer
-    assert actual == expected
 
 
 @given(integers())
@@ -223,15 +189,6 @@ def test_base_handler_bad_req():
     assert "could not parse" in bad_json.value.message.lower()
 
 
-def test_style_handler_bad_req():
-    with raises(errors.JsonKeyError) as no_key:
-        style = StyleStrHandler()
-        style.request.headers['content-type'] = 'application/json'
-        style.body = '{}'
-        style.post()
-    assert "style" in no_key.value.message.lower()
-
-
 def test_render_handler_bad_req():
     keys = ["bpbf", "zoom", "style"]
 
@@ -276,24 +233,12 @@ def test_render_handler_bad_req():
     assert "int" in bad_zoom.value.message.lower()
 
 
-@given(text(), text())
-def test_style_handler(jbody, xml):
-    # pylint: disable=attribute-defined-outside-init
-    renderer = StrRenderer(xml)
-    style = StyleStrHandler(renderer=renderer)
-    style.jbody = {'style': jbody}
-    style.post()
-
-    assert xml == style.was_written()
-    assert style.finished
-
-
 # pylint: disable=line-too-long
 def test_render_handler():
     """
     This is a simple regression test, it only hits one case.
     """
-    handler = RenderStrHandler(renderer=CssRenderer())
+    handler = RenderStrHandler()
     css = '#main{marker-line-color:#00C;marker-width:1}'
     layer = {
         "name": "main",
@@ -306,7 +251,7 @@ def test_render_handler():
     }
     tile = b64encode(tile_encode([layer]))
     handler.jbody = {'zoom': 14, 'style': css, 'bpbf': tile}
-    handler.post()
+    handler.post()                    # TODO: Use Async HTTP client!
     if platform.system() == 'Darwin':  # noqa
         expected = """iVBORw0KGgoAAAANSUhEUgAAAQAAAAEACAYAAABccqhmAAABOklEQVR4nO3VsQ2AMAxFwYTsv1kYgkkcECMg8YvcSe5fY7s1AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAvqmRLgAiZr1TR7oE+N2z/Od1H4CeLgEifH8A2MIC2WYLFCJC8r4AAAAASUVORK5CYII="""  # noqa
     elif platform.system() == 'Linux':
