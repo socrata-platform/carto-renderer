@@ -153,12 +153,16 @@ class BaseHandler(RequestHandler):
         """
         Extract the json body from self.request.
         """
+        logger = logging.getLogger("{}.{}".format(__package__,
+                                                  self.__class__.__name__))
+
         request_id = self.request.headers.get('x-socrata-requestid', '')
         LOG_ENV['X-Socrata-RequestId'] = request_id
 
         content_type = self.request.headers.get('content-type', '')
         if not content_type.lower().startswith('application/json'):
             message = "Invalid Content-Type: '{}'; expected 'application/json'"
+            logger.warn("Invalid Content-Type: '{}'", extra=LOG_ENV)
             raise BadRequest(message.format(content_type))
 
         body = self.request.body
@@ -166,6 +170,7 @@ class BaseHandler(RequestHandler):
         try:
             jbody = json.loads(body)
         except StandardError:
+            logger.warn("Invalid JSON", extra=LOG_ENV)
             raise BadRequest("Could not parse JSON.", body)
         return jbody
 
@@ -234,6 +239,7 @@ class StyleHandler(BaseHandler):
             self.write(self.css_renderer.render_css(jbody['style']))
             self.finish()
         else:
+
             raise JsonKeyError('style', jbody)
 
 
@@ -257,19 +263,31 @@ class RenderHandler(BaseHandler):
 
         Expects a JSON blob with 'style', 'zoom', and 'bpbf' values.
         """
+        logger = logging.getLogger("{}.{}".format(__package__,
+                                                  self.__class__.__name__))
         jbody = self.extract_jbody()
 
         if not all([k in jbody for k in self.keys]):
+            logger.warn("Invalid JSON: %s", jbody, extra=LOG_ENV)
             raise JsonKeyError(self.keys, jbody)
         else:
             try:
                 zoom = int(jbody['zoom'])
             except:
+                logger.warn("Invalid JSON; zoom must be an integer: %s",
+                            jbody,
+                            extra=LOG_ENV)
                 raise BadRequest("'zoom' must be an integer.",
                                  request_body=jbody)
             pbf = base64.b64decode(jbody['bpbf'])
             tile = mapbox_vector_tile.decode(pbf)
             xml = self.css_renderer.render_css(jbody['style'])
+
+            logger.info("zoom: %d, len(pbf): %d, len(xml): %d",
+                        zoom,
+                        len(pbf),
+                        len(xml),
+                        extra=LOG_ENV)
             self.write(render_png(tile, zoom, xml))
             self.finish()
 
