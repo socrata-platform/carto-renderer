@@ -49,18 +49,18 @@ def build_wkt(geom_code, geometries):
 
         first = coords[0]
         if not isinstance(first, collections.Iterable):
-            return " ".join([str(c / TILE_ZOOM_FACTOR) for c in coords])
+            return ' '.join([str(c / TILE_ZOOM_FACTOR) for c in coords])
         else:
-            return '({})'.format(','.join([collapse(c) for c in coords]))
+            return '(' + (','.join([collapse(c) for c in coords])) + ')'
 
     collapsed = collapse(geometries)
 
     if geom_type == 'UNKNOWN':
-        logger.warn(u"Unknown geometry code: %s", geom_code, extra=LOG_ENV)
+        logger.warn(u'Unknown geometry code: %s', geom_code, extra=LOG_ENV)
         return None
 
     if geom_type != 'POINT':
-        collapsed = '({})'.format(collapsed)
+        collapsed = '(' + collapsed + ')'
 
     return geom_type + collapsed
 
@@ -103,7 +103,7 @@ def render_png(tile, zoom, xml):
     image = mapnik.Image(map_tile.width, map_tile.height)
     mapnik.render(map_tile, image)
 
-    return image.tostring("png")
+    return image.tostring('png')
 
 
 class BaseHandler(RequestHandler):
@@ -115,33 +115,38 @@ class BaseHandler(RequestHandler):
         """
         Extract the json body from self.request.
         """
-        logger = logging.getLogger("{}.{}".format(__package__,
-                                                  self.__class__.__name__))
+        logger = logging.getLogger(__package__ +
+                                   '.' +
+                                   self.__class__.__name__)
 
         request_id = self.request.headers.get('x-socrata-requestid', '')
         LOG_ENV['X-Socrata-RequestId'] = request_id
 
         content_type = self.request.headers.get('content-type', '')
         if not content_type.lower().startswith('application/json'):
-            message = "Invalid Content-Type: '{}'; expected 'application/json'"
-            logger.warn("Invalid Content-Type: '{}'", extra=LOG_ENV)
-            raise BadRequest(message.format(content_type))
+            message = 'Invalid Content-Type: "{ct}"; ' + \
+                      'expected "application/json"'
+            logger.warn('Invalid Content-Type: "%s"',
+                        content_type,
+                        extra=LOG_ENV)
+            raise BadRequest(message.format(ct=content_type))
 
         body = self.request.body
 
         try:
             jbody = json.loads(body)
         except StandardError:
-            logger.warn("Invalid JSON", extra=LOG_ENV)
-            raise BadRequest("Could not parse JSON.", body)
+            logger.warn('Invalid JSON', extra=LOG_ENV)
+            raise BadRequest('Could not parse JSON.', body)
         return jbody
 
     def _handle_request_exception(self, err):
         """
         Convert ServiceErrors to HTTP errors.
         """
-        logger = logging.getLogger("{}.{}".format(__package__,
-                                                  self.__class__.__name__))
+        logger = logging.getLogger(__package__ +
+                                   '.' +
+                                   self.__class__.__name__)
 
         payload = {}
         logger.exception(err, extra=LOG_ENV)
@@ -172,8 +177,9 @@ class VersionHandler(BaseHandler):
         """
         Return the version of the service, currently hardcoded.
         """
-        logger = logging.getLogger('{}.{}'.format(__package__,
-                                                  self.__class__.__name__))
+        logger = logging.getLogger(__package__ +
+                                   '.' +
+                                   self.__class__.__name__)
         logger.info('Alive!', extra=LOG_ENV)
         self.write(VersionHandler.version)
         self.finish()
@@ -194,27 +200,29 @@ class RenderHandler(BaseHandler):
 
         Expects a JSON blob with 'style', 'zoom', and 'bpbf' values.
         """
-        logger = logging.getLogger("{}.{}".format(__package__,
-                                                  self.__class__.__name__))
+        logger = logging.getLogger(__package__ +
+                                   '.' +
+                                   self.__class__.__name__)
+
         jbody = self.extract_jbody()
 
         if not all([k in jbody for k in self.keys]):
-            logger.warn("Invalid JSON: %s", jbody, extra=LOG_ENV)
+            logger.warn('Invalid JSON: %s', jbody, extra=LOG_ENV)
             raise JsonKeyError(self.keys, jbody)
         else:
             try:
                 zoom = int(jbody['zoom'])
             except:
-                logger.warn("Invalid JSON; zoom must be an integer: %s",
+                logger.warn('Invalid JSON; zoom must be an integer: %s',
                             jbody,
                             extra=LOG_ENV)
-                raise BadRequest("'zoom' must be an integer.",
+                raise BadRequest('"zoom" must be an integer.',
                                  request_body=jbody)
             pbf = base64.b64decode(jbody['bpbf'])
             tile = mapbox_vector_tile.decode(pbf)
             xml = jbody['style']  # TODO: Actually render!
 
-            logger.info("zoom: %d, len(pbf): %d, len(xml): %d",
+            logger.info('zoom: %d, len(pbf): %d, len(xml): %d',
                         zoom,
                         len(pbf),
                         len(xml),
@@ -230,7 +238,7 @@ def main():  # pragma: no cover
     Listens on 4096.
     """
     parser = argparse.ArgumentParser(
-        description="A rendering service for vector tiles using Mapnik.")
+        description='A rendering service for vector tiles using Mapnik.')
     parser.add_argument('--log-config-file',
                         dest='log_config_file',
                         default='logging.ini',
@@ -247,8 +255,8 @@ def main():  # pragma: no cover
     app = Application(routes)
     app.listen(4096)
     logger = logging.getLogger(__package__)
-    logger.info("Listening on localhost:4096...", extra=LOG_ENV)
+    logger.info('Listening on localhost:4096...', extra=LOG_ENV)
     IOLoop.current().start()
 
-if __name__ == "__main__":  # pragma: no cover
+if __name__ == '__main__':  # pragma: no cover
     main()
