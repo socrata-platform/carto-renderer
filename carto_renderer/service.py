@@ -245,7 +245,6 @@ class RenderHandler(BaseHandler):
                 self.write(render_png(tile, zoom, xml))
                 self.finish()
 
-            logger.info(path)
             http_client.fetch(path, callback=handle_response)
 
 
