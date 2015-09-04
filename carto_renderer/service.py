@@ -2,17 +2,19 @@
 """
 Service to render pngs from vector tiles using Carto CSS.
 """
-import mapnik
-import mapbox_vector_tile
+from tornado.options import define, parse_command_line, options
+from tornado.httpclient import AsyncHTTPClient
 from tornado.ioloop import IOLoop
-from tornado.web import Application, RedirectHandler, RequestHandler, url
+from tornado.web import Application, RedirectHandler, RequestHandler, asynchronous, url
+import mapbox_vector_tile
+import mapnik
 
-import argparse
+import base64
+import collections
 import json
 import logging
-import collections
-import base64
 import logging.config
+import urllib
 
 from carto_renderer.errors import BadRequest, JsonKeyError, ServiceError
 from carto_renderer.version import SEMANTIC
@@ -194,6 +196,7 @@ class RenderHandler(BaseHandler):
     """
     keys = ['bpbf', 'zoom', 'style']
 
+    @asynchronous
     def post(self):
         """
         Actually render the png.
@@ -218,17 +221,32 @@ class RenderHandler(BaseHandler):
                             extra=LOG_ENV)
                 raise BadRequest('"zoom" must be an integer.',
                                  request_body=jbody)
+            path = 'http://{host}:{port}/style?style={css}'.format(
+                host='localhost',
+                port='4097',
+                css=urllib.quote_plus(jbody['style']))
+
+            http_client = AsyncHTTPClient()
+
             pbf = base64.b64decode(jbody['bpbf'])
             tile = mapbox_vector_tile.decode(pbf)
-            xml = jbody['style']  # TODO: Actually render!
 
-            logger.info('zoom: %d, len(pbf): %d, len(xml): %d',
-                        zoom,
-                        len(pbf),
-                        len(xml),
-                        extra=LOG_ENV)
-            self.write(render_png(tile, zoom, xml))
-            self.finish()
+            def handle_response(response):
+                """
+                Process the XML returned by the style renderer.
+                """
+                xml = response.body
+
+                logger.info('zoom: %d, len(pbf): %d, len(xml): %d',
+                            zoom,
+                            len(pbf),
+                            len(xml),
+                            extra=LOG_ENV)
+                self.write(render_png(tile, zoom, xml))
+                self.finish()
+
+            logger.info(path)
+            http_client.fetch(path, callback=handle_response)
 
 
 def main():  # pragma: no cover
@@ -237,14 +255,12 @@ def main():  # pragma: no cover
 
     Listens on 4096.
     """
-    parser = argparse.ArgumentParser(
-        description='A rendering service for vector tiles using Mapnik.')
-    parser.add_argument('--log-config-file',
-                        dest='log_config_file',
-                        default='logging.ini',
-                        help='Config file for `logging.config`')
-    args = parser.parse_args()
-    logging.config.fileConfig(args.log_config_file)
+    define('port', default=4096)
+    define('log_config_file',
+           default='logging.ini',
+           help='Config file for `logging.config`')
+    parse_command_line()
+    logging.config.fileConfig(options.log_config_file)
 
     routes = [
         url(r'/', RedirectHandler, {'url': '/version'}),
@@ -253,10 +269,10 @@ def main():  # pragma: no cover
     ]
 
     app = Application(routes)
-    app.listen(4096)
+    app.listen(options.port)
     logger = logging.getLogger(__package__)
     logger.info('Listening on localhost:4096...', extra=LOG_ENV)
-    IOLoop.current().start()
+    IOLoop.instance().start()
 
 if __name__ == '__main__':  # pragma: no cover
     main()
