@@ -314,8 +314,4 @@ def test_render_handler(host, port):
         raise NotImplementedError("Unknown platform!")
 
     assert handler.finished
-    with open('/tmp/test.png', 'w') as f:
-        import base64
-        f.write(base64.b64decode(handler.was_written_b64()))
-
     assert handler.was_written_b64() == expected
