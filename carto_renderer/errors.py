@@ -31,7 +31,7 @@ class JsonKeyError(ServiceError):
     plural = "Request JSON must contain the keys '{}' and '{}'."
 
     def __init__(self, keys, blob):
-        message = ""
+        message = ''
         if str(keys) == keys:
             keys = [keys]
 
@@ -39,7 +39,7 @@ class JsonKeyError(ServiceError):
             message = JsonKeyError.singular.format(keys[0])
         else:
             beg = keys[:-1]
-            message = JsonKeyError.plural.format('", "'.join(beg),
+            message = JsonKeyError.plural.format("', '".join(beg),
                                                  keys[-1])
 
         super(JsonKeyError, self).__init__(message, 400, request_body=blob)
