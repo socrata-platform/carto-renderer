@@ -3,6 +3,5 @@ tornado
 
 hypothesis # test
 mock       # test
-pypng      # test
 pytest     # test
 

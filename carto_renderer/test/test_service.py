@@ -1,18 +1,22 @@
 # pylint: disable=missing-docstring,line-too-long,import-error,abstract-method
 import json
 import platform
+import string
 
 from base64 import b64encode
 from hypothesis import assume, given
 from hypothesis.strategies import integers, lists, text
 from mapbox_vector_tile import encode as tile_encode
 from pytest import raises
+from tornado.options import define, options
 from tornado.web import RequestHandler
 
 try:
     from unittest import mock   # pylint: disable=no-name-in-module
 except ImportError:
     import mock
+
+from mock import patch
 
 try:
     unicode
@@ -27,9 +31,29 @@ POINT_LISTS = lists(integers(), 2, 2, 2)
 SHELL_LISTS = lists(POINT_LISTS, 1, 10, 100)
 
 
+define('style_host')
+define('style_port')
+
+
 def render_pair(pair):
     assert len(pair) == 2
     return "{} {}".format(pair[0], pair[1])
+
+
+class MockClient(object):
+    # pylint: disable=too-few-public-methods
+    class MockResp(object):
+        def __init__(self, body):
+            self.body = body
+
+    def __init__(self, xml):
+        self.resp = MockClient.MockResp(xml)
+
+    def __call__(self):
+        return self
+
+    def fetch(self, _, callback):
+        callback(self.resp)
 
 
 class StrRenderer(object):
@@ -56,6 +80,10 @@ class StringHandler(RequestHandler):
         self.request = self
         self.headers = {}
         self.body = None
+
+    # Stop @web.asynchronous from swallowing exceptions!
+    def _stack_context_handle_exception(self, *_):
+        raise
 
     def clear(self):
         self.written = []
@@ -134,10 +162,6 @@ def test_build_wkt_line_polygon(shells):
     point_str = [','.join([render_pair(p) for p in points])
                  for points in shells]
     assert wkt == 'POLYGON((({})))'.format('),('.join(point_str))
-
-
-def test_render_bad_wkt():
-    pass
 
 
 @given(text(), integers(), text())
@@ -233,12 +257,27 @@ def test_render_handler_bad_req():
     assert "int" in bad_zoom.value.message.lower()
 
 
-# pylint: disable=line-too-long
-def test_render_handler():
+@given(text(alphabet=string.printable),
+       text(alphabet=string.printable))
+def test_render_handler(host, port):
     """
     This is a simple regression test, it only hits one case.
     """
     handler = RenderStrHandler()
+    xml = """<?xml version="1.0" encoding="utf-8"?>
+    <!DOCTYPE Map[]>
+    <Map>
+      <Style name="main" filter-mode="first">
+        <Rule>
+          <MarkersSymbolizer stroke="#0000cc" width="1" />
+        </Rule>
+      </Style>
+      <Layer name="main">
+        <StyleName>main</StyleName>
+      </Layer>
+    </Map>
+    """
+
     css = '#main{marker-line-color:#00C;marker-width:1}'
     layer = {
         "name": "main",
@@ -251,13 +290,32 @@ def test_render_handler():
     }
     tile = b64encode(tile_encode([layer]))
     handler.jbody = {'zoom': 14, 'style': css, 'bpbf': tile}
-    handler.post()                    # TODO: Use Async HTTP client!
+
+    with patch.object(options.mockable(), 'style_host', str(host)), \
+         patch.object(options.mockable(), 'style_port', str(port)), \
+         patch('carto_renderer.service.AsyncHTTPClient',
+               new_callable=MockClient(xml)):  # noqa
+
+        handler.post()
+
     if platform.system() == 'Darwin':  # noqa
-        expected = """iVBORw0KGgoAAAANSUhEUgAAAQAAAAEACAYAAABccqhmAAABOklEQVR4nO3VsQ2AMAxFwYTsv1kYgkkcECMg8YvcSe5fY7s1AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAvqmRLgAiZr1TR7oE+N2z/Od1H4CeLgEifH8A2MIC2WYLFCJC8r4AAAAASUVORK5CYII="""  # noqa
+        expected = (
+            'iVBORw0KGgoAAAANSUhEUgAAAQAAAAEACAYAAABccqhmAAABOklEQVR' +
+            '4nO3VsQ2AMAxFwYTsv1kYgkkcECMg8YvcSe5fY7s1' + ('A' * 332) +
+            'vqmRLgAiZr1TR7oE+N2z/Od1H4CeLgEifH8A2MIC2WYLFCJC8r4AAAA' +
+            'ASUVORK5CYII=')
     elif platform.system() == 'Linux':
-        expected = """iVBORw0KGgoAAAANSUhEUgAAAQAAAAEACAYAAABccqhmAAABPUlEQVR4nO3VsQ2AMBAEQWP678wU4QZowX5qQOICZqTPL9pvDQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAgHfWmV4ARIxVd1cEenoJ8LknANesABzpJUCE7w8Av7AByiMLAy0uJsQAAAAASUVORK5CYII="""  # noqa
+        expected = (
+            'iVBORw0KGgoAAAANSUhEUgAAAQAAAAEACAYAAABccqhmAAABPUlEQVR' +
+            '4nO3VsQ2AMBAEQWP678wU4QZowX5qQOICZqTPL9pvDQ' + ('A' * 330) +
+            'gHfWmV4ARIxVd1cEenoJ8LknANesABzpJUCE7w8Av7AByiMLAy0uJsQ' +
+            'AAAAASUVORK5CYII=')
     else:
         raise NotImplementedError("Unknown platform!")
 
     assert handler.finished
+    with open('/tmp/test.png', 'w') as f:
+        import base64
+        f.write(base64.b64decode(handler.was_written_b64()))
+
     assert handler.was_written_b64() == expected
