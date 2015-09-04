@@ -2,18 +2,18 @@
 """
 Service to render pngs from vector tiles using Carto CSS.
 """
-from tornado.options import define, parse_command_line, options
+
+from tornado import web
 from tornado.httpclient import AsyncHTTPClient
 from tornado.ioloop import IOLoop
-from tornado.web import Application, RedirectHandler, RequestHandler, asynchronous, url
+from tornado.options import define, parse_command_line, options
 import mapbox_vector_tile
 import mapnik
 
 import base64
 import collections
 import json
-import logging
-import logging.config
+from logging import config as log_config
 import urllib
 
 from carto_renderer.errors import BadRequest, JsonKeyError, ServiceError
@@ -30,7 +30,42 @@ GEOM_TYPES = {
 # Variables for Vector Tiles.
 BASE_ZOOM = 29
 TILE_ZOOM_FACTOR = 16
-LOG_ENV = {'X-Socrata-RequestId': None}
+
+
+class LogWrapper(object):
+    """
+    A logging wrapper that includes log environment automatically.
+    """
+    ENV = {'X-Socrata-RequestId': None}
+
+    def __init__(self, underlying):
+        self.underlying = underlying
+
+    def debug(self, *args):
+        """Log a debug statement."""
+        self.underlying.debug(*args, extra=LogWrapper.ENV)
+
+    def info(self, *args):
+        """Log an info statement."""
+        self.underlying.info(*args, extra=LogWrapper.ENV)
+
+    def warn(self, *args):
+        """Log a warning."""
+        self.underlying.warn(*args, extra=LogWrapper.ENV)
+
+    def exception(self, *args):
+        """Log an exception."""
+        self.underlying.exception(*args, extra=LogWrapper.ENV)
+
+
+def get_logger(obj=None):
+    """
+    Return a (wrapped) logger with appropriate name.
+    """
+    import logging
+
+    tail = '.' + obj.__class__.__name__ if obj else ''
+    return LogWrapper(logging.getLogger(__package__ + tail))
 
 
 def build_wkt(geom_code, geometries):
@@ -39,7 +74,7 @@ def build_wkt(geom_code, geometries):
 
     Returns None on failure.
     """
-    logger = logging.getLogger(__package__)
+    logger = get_logger()
     geom_type = GEOM_TYPES.get(geom_code, 'UNKNOWN')
 
     def collapse(coords):
@@ -58,7 +93,7 @@ def build_wkt(geom_code, geometries):
     collapsed = collapse(geometries)
 
     if geom_type == 'UNKNOWN':
-        logger.warn(u'Unknown geometry code: %s', geom_code, extra=LOG_ENV)
+        logger.warn(u'Unknown geometry code: %s', geom_code)
         return None
 
     if geom_type != 'POINT':
@@ -74,7 +109,7 @@ def render_png(tile, zoom, xml):
     """
     Render the tile for the given zoom
     """
-    logger = logging.getLogger(__package__)
+    logger = get_logger()
     ctx = mapnik.Context()
 
     map_tile = mapnik.Map(256, 256)
@@ -93,7 +128,7 @@ def render_png(tile, zoom, xml):
 
         for feature in features:
             wkt = build_wkt(feature['type'], feature['geometry'])
-            logger.debug('wkt: %s', wkt, extra=LOG_ENV)
+            logger.debug('wkt: %s', wkt)
             feat = mapnik.Feature(ctx, 0)
             if wkt:
                 feat.add_geometries_from_wkt(wkt)
@@ -108,7 +143,7 @@ def render_png(tile, zoom, xml):
     return image.tostring('png')
 
 
-class BaseHandler(RequestHandler):
+class BaseHandler(web.RequestHandler):
     # pylint: disable=abstract-method
     """
     Convert ServiceErrors to HTTP errors.
@@ -117,20 +152,16 @@ class BaseHandler(RequestHandler):
         """
         Extract the json body from self.request.
         """
-        logger = logging.getLogger(__package__ +
-                                   '.' +
-                                   self.__class__.__name__)
+        logger = get_logger()
 
         request_id = self.request.headers.get('x-socrata-requestid', '')
-        LOG_ENV['X-Socrata-RequestId'] = request_id
+        LogWrapper.ENV['X-Socrata-RequestId'] = request_id
 
         content_type = self.request.headers.get('content-type', '')
         if not content_type.lower().startswith('application/json'):
             message = 'Invalid Content-Type: "{ct}"; ' + \
                       'expected "application/json"'
-            logger.warn('Invalid Content-Type: "%s"',
-                        content_type,
-                        extra=LOG_ENV)
+            logger.warn('Invalid Content-Type: "%s"', content_type)
             raise BadRequest(message.format(ct=content_type))
 
         body = self.request.body
@@ -138,7 +169,7 @@ class BaseHandler(RequestHandler):
         try:
             jbody = json.loads(body)
         except StandardError:
-            logger.warn('Invalid JSON', extra=LOG_ENV)
+            logger.warn('Invalid JSON')
             raise BadRequest('Could not parse JSON.', body)
         return jbody
 
@@ -146,12 +177,10 @@ class BaseHandler(RequestHandler):
         """
         Convert ServiceErrors to HTTP errors.
         """
-        logger = logging.getLogger(__package__ +
-                                   '.' +
-                                   self.__class__.__name__)
+        logger = get_logger()
 
         payload = {}
-        logger.exception(err, extra=LOG_ENV)
+        logger.exception(err)
         if isinstance(err, ServiceError):
             status_code = err.status_code
             if err.request_body:
@@ -179,10 +208,9 @@ class VersionHandler(BaseHandler):
         """
         Return the version of the service, currently hardcoded.
         """
-        logger = logging.getLogger(__package__ +
-                                   '.' +
-                                   self.__class__.__name__)
-        logger.info('Alive!', extra=LOG_ENV)
+        logger = get_logger()
+
+        logger.info('Alive!')
         self.write(VersionHandler.version)
         self.finish()
 
@@ -196,34 +224,30 @@ class RenderHandler(BaseHandler):
     """
     keys = ['bpbf', 'zoom', 'style']
 
-    @asynchronous
+    @web.asynchronous
     def post(self):
         """
         Actually render the png.
 
         Expects a JSON blob with 'style', 'zoom', and 'bpbf' values.
         """
-        logger = logging.getLogger(__package__ +
-                                   '.' +
-                                   self.__class__.__name__)
+        logger = get_logger()
 
         jbody = self.extract_jbody()
 
         if not all([k in jbody for k in self.keys]):
-            logger.warn('Invalid JSON: %s', jbody, extra=LOG_ENV)
+            logger.warn('Invalid JSON: %s', jbody)
             raise JsonKeyError(self.keys, jbody)
         else:
             try:
                 zoom = int(jbody['zoom'])
             except:
-                logger.warn('Invalid JSON; zoom must be an integer: %s',
-                            jbody,
-                            extra=LOG_ENV)
+                logger.warn('Invalid JSON; zoom must be an integer: %s', jbody)
                 raise BadRequest('"zoom" must be an integer.',
                                  request_body=jbody)
             path = 'http://{host}:{port}/style?style={css}'.format(
-                host='localhost',
-                port='4097',
+                host=options.style_host,
+                port=options.style_port,
                 css=urllib.quote_plus(jbody['style']))
 
             http_client = AsyncHTTPClient()
@@ -240,8 +264,7 @@ class RenderHandler(BaseHandler):
                 logger.info('zoom: %d, len(pbf): %d, len(xml): %d',
                             zoom,
                             len(pbf),
-                            len(xml),
-                            extra=LOG_ENV)
+                            len(xml))
                 self.write(render_png(tile, zoom, xml))
                 self.finish()
 
@@ -258,19 +281,21 @@ def main():  # pragma: no cover
     define('log_config_file',
            default='logging.ini',
            help='Config file for `logging.config`')
+    define('style_host', default='localhost')
+    define('style_port', default=4097)
     parse_command_line()
-    logging.config.fileConfig(options.log_config_file)
+    log_config.fileConfig(options.log_config_file)
 
     routes = [
-        url(r'/', RedirectHandler, {'url': '/version'}),
-        url(r'/version', VersionHandler),
-        url(r'/render', RenderHandler),
+        web.url(r'/', web.RedirectHandler, {'url': '/version'}),
+        web.url(r'/version', VersionHandler),
+        web.url(r'/render', RenderHandler),
     ]
 
-    app = Application(routes)
+    app = web.Application(routes)
     app.listen(options.port)
-    logger = logging.getLogger(__package__)
-    logger.info('Listening on localhost:4096...', extra=LOG_ENV)
+    logger = get_logger()
+    logger.info('Listening on localhost:4096...')
     IOLoop.instance().start()
 
 if __name__ == '__main__':  # pragma: no cover
