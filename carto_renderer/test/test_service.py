@@ -9,15 +9,12 @@ from hypothesis import assume, given
 from hypothesis.strategies import integers, lists, text
 from mapbox_vector_tile import encode as tile_encode
 from pytest import raises
-from tornado.options import define, options
 from tornado.web import RequestHandler
 
 try:
     from unittest import mock   # pylint: disable=no-name-in-module
 except ImportError:
     import mock
-
-from mock import patch
 
 try:
     unicode
@@ -30,10 +27,6 @@ from carto_renderer.service import GEOM_TYPES, build_wkt
 
 POINT_LISTS = lists(integers(), 2, 2, 2)
 SHELL_LISTS = lists(POINT_LISTS, 1, 10, 100)
-
-
-define('style_host')
-define('style_port')
 
 
 def render_pair(pair):
@@ -108,9 +101,15 @@ class VersionStrHandler(service.VersionHandler, StringHandler):
 
 
 class RenderStrHandler(service.RenderHandler, StringHandler):
+    def initialize(self):
+        pass
+
     def __init__(self):
         StringHandler.__init__(self)
         self.jbody = None
+        self.http_client = None
+        self.style_host = None
+        self.style_port = None
 
     def extract_jbody(self):
         if self.jbody:
@@ -282,13 +281,11 @@ def test_render_handler(host, port):
     }
     tile = b64encode(tile_encode([layer]))
     handler.jbody = {'zoom': 14, 'style': css, 'bpbf': tile}
+    handler.http_client = MockClient(css, xml)
+    handler.style_host = str(host)
+    handler.style_port = str(port)
 
-    with patch.object(options.mockable(), 'style_host', str(host)), \
-         patch.object(options.mockable(), 'style_port', str(port)), \
-         patch('carto_renderer.service.AsyncHTTPClient',
-               new_callable=MockClient(css, xml)):  # noqa
-
-        handler.post()
+    handler.post()
 
     if platform.system() == 'Darwin':  # pragma: no cover
         expected = (

@@ -216,13 +216,19 @@ class VersionHandler(BaseHandler):
 
 
 class RenderHandler(BaseHandler):
-    # pylint: disable=abstract-method
+    # pylint: disable=abstract-method, arguments-differ
     """
     Actually render the png.
 
     Expects a JSON blob with 'style', 'zoom', and 'bpbf' values.
     """
     keys = ['bpbf', 'zoom', 'style']
+
+    def initialize(self, http_client, style_host, style_port):
+        """Magic Tornado __init__ replacement."""
+        self.http_client = http_client
+        self.style_host = style_host
+        self.style_port = style_port
 
     @web.asynchronous
     def post(self):
@@ -246,11 +252,9 @@ class RenderHandler(BaseHandler):
                 raise BadRequest('"zoom" must be an integer.',
                                  request_body=jbody)
             path = 'http://{host}:{port}/style?style={css}'.format(
-                host=options.style_host,
-                port=options.style_port,
+                host=self.style_host,
+                port=self.style_port,
                 css=urllib.quote_plus(jbody['style']))
-
-            http_client = AsyncHTTPClient()
 
             pbf = base64.b64decode(jbody['bpbf'])
             tile = mapbox_vector_tile.decode(pbf)
@@ -268,7 +272,7 @@ class RenderHandler(BaseHandler):
                 self.write(render_png(tile, zoom, xml))
                 self.finish()
 
-            http_client.fetch(path, callback=handle_response)
+            self.http_client.fetch(path, callback=handle_response)
 
 
 def main():  # pragma: no cover
@@ -289,7 +293,11 @@ def main():  # pragma: no cover
     routes = [
         web.url(r'/', web.RedirectHandler, {'url': '/version'}),
         web.url(r'/version', VersionHandler),
-        web.url(r'/render', RenderHandler),
+        web.url(r'/render', RenderHandler, {
+            'carto_host': options.style_host,
+            'carto_port': options.style_port,
+            'http_client': AsyncHTTPClient()
+        }),
     ]
 
     app = web.Application(routes)
