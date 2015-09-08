@@ -22,14 +22,15 @@ Install Python Dependencies:
 pip install -r requirements.txt
 ```
 
-Render an image to `test.png`:
-```
-curl -o test.png localhost:4096/render -H 'Content-type: application/json' -d @carto_renderer/examples/main.json
-```
-
 ## Start the Service ##
 ```
 PYTHONPATH=. carto_renderer/service.py
+```
+
+## Examples ##
+Render an image to `test.png`:
+```
+curl -o test.png localhost:4096/render -H 'Content-type: application/json' -d @carto_renderer/examples/main.json
 ```
 
 ## Testing ##
