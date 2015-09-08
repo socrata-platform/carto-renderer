@@ -59,17 +59,6 @@ class MockClient(object):
         callback(self.resp)
 
 
-class StrRenderer(object):
-    # pylint: disable=too-few-public-methods
-    def __init__(self, xml):
-        self.xml = xml
-        self.css = None
-
-    def render_css(self, css):
-        self.css = css
-        return self.xml
-
-
 class StringHandler(RequestHandler):
     # pylint: disable=super-init-not-called
     def __init__(self, **kwargs):
@@ -301,19 +290,19 @@ def test_render_handler(host, port):
 
         handler.post()
 
-    if platform.system() == 'Darwin':  # noqa
+    if platform.system() == 'Darwin':  # pragma: no cover
         expected = (
             'iVBORw0KGgoAAAANSUhEUgAAAQAAAAEACAYAAABccqhmAAABOklEQVR' +
             '4nO3VsQ2AMAxFwYTsv1kYgkkcECMg8YvcSe5fY7s1' + ('A' * 332) +
             'vqmRLgAiZr1TR7oE+N2z/Od1H4CeLgEifH8A2MIC2WYLFCJC8r4AAAA' +
             'ASUVORK5CYII=')
-    elif platform.system() == 'Linux':
+    elif platform.system() == 'Linux':  # pragma: no cover
         expected = (
             'iVBORw0KGgoAAAANSUhEUgAAAQAAAAEACAYAAABccqhmAAABPUlEQVR' +
             '4nO3VsQ2AMBAEQWP678wU4QZowX5qQOICZqTPL9pvDQ' + ('A' * 330) +
             'gHfWmV4ARIxVd1cEenoJ8LknANesABzpJUCE7w8Av7AByiMLAy0uJsQ' +
             'AAAAASUVORK5CYII=')
-    else:
+    else:                       # pragma: no cover
         raise NotImplementedError("Unknown platform!")
 
     assert handler.finished
