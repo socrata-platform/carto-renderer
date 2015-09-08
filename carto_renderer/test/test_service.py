@@ -2,6 +2,7 @@
 import json
 import platform
 import string
+import urllib
 
 from base64 import b64encode
 from hypothesis import assume, given
@@ -46,13 +47,15 @@ class MockClient(object):
         def __init__(self, body):
             self.body = body
 
-    def __init__(self, xml):
+    def __init__(self, style, xml):
         self.resp = MockClient.MockResp(xml)
+        self.style = style
 
     def __call__(self):
         return self
 
-    def fetch(self, _, callback):
+    def fetch(self, path, callback):
+        assert path.endswith(urllib.quote_plus(self.style))
         callback(self.resp)
 
 
@@ -294,7 +297,7 @@ def test_render_handler(host, port):
     with patch.object(options.mockable(), 'style_host', str(host)), \
          patch.object(options.mockable(), 'style_port', str(port)), \
          patch('carto_renderer.service.AsyncHTTPClient',
-               new_callable=MockClient(xml)):  # noqa
+               new_callable=MockClient(css, xml)):  # noqa
 
         handler.post()
 
