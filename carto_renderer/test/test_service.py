@@ -304,3 +304,30 @@ def test_render_handler(host, port):
 
     assert handler.finished
     assert handler.was_written_b64() == expected
+
+
+@given(text(alphabet=string.printable),
+       text(alphabet=string.printable))
+def test_render_handler_no_xml(host, port):
+    css = '#main{marker-line-color:#00C;marker-width:1}'
+    layer = {
+        "name": "main",
+        "features": [
+            {
+                "geometry": "POINT(50 50)",
+                "properties": {}
+            }
+        ]
+    }
+    tile = b64encode(tile_encode([layer]))
+
+    handler = RenderStrHandler()
+    handler.jbody = {'zoom': 14, 'style': css, 'bpbf': tile}
+    handler.http_client = MockClient(css, None)
+    handler.style_host = str(host)
+    handler.style_port = str(port)
+
+    with raises(errors.ServiceError) as no_xml:
+        handler.post()
+
+    assert "style-renderer" in no_xml.value.message.lower()
