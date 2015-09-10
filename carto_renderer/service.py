@@ -331,8 +331,8 @@ def main():  # pragma: no cover
         web.url(r'/', web.RedirectHandler, {'url': '/version'}),
         web.url(r'/version', VersionHandler),
         web.url(r'/render', RenderHandler, {
-            'carto_host': options.style_host,
-            'carto_port': options.style_port,
+            'style_host': options.style_host,
+            'style_port': options.style_port,
             'http_client': AsyncHTTPClient()
         }),
     ]
