@@ -1,4 +1,4 @@
 #!/bin/bash
 set -ev
 
-exec su socrata -c 'PYTHONPATH=. python carto_renderer/service.py --log-config-file /etc/logging.ini'
+exec su socrata -c 'PYTHONPATH=. python carto_renderer/service.py'
