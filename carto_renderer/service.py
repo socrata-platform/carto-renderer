@@ -13,7 +13,6 @@ import mapnik
 import base64
 import collections
 import json
-from logging import config as log_config
 import urllib
 
 from carto_renderer.errors import BadRequest, JsonKeyError, ServiceError
@@ -66,6 +65,37 @@ def get_logger(obj=None):
 
     tail = '.' + obj.__class__.__name__ if obj else ''
     return LogWrapper(logging.getLogger(__package__ + tail))
+
+
+def init_logging():
+    """
+    Initialize logging from config.
+    """
+    import logging
+    import sys
+
+    root_formatter = logging.Formatter(
+        '%(asctime)s %(levelname)s [%(thread)d] ' +
+        '%(name)s.%(funcName)s %(message)s')
+
+    root_handler = logging.StreamHandler(sys.stdout)
+    root_handler.setLevel(options.log_level)
+    root_handler.setFormatter(root_formatter)
+
+    root = logging.getLogger()
+    root.setLevel(options.log_level)
+    root.addHandler(root_handler)
+
+    carto_formatter = logging.Formatter(options.log_format)
+
+    carto_handler = logging.StreamHandler(sys.stdout)
+    carto_handler.setLevel(options.log_level)
+    carto_handler.setFormatter(carto_formatter)
+
+    carto = get_logger().underlying
+    carto.setLevel(options.log_level)
+    carto.propagate = 0
+    carto.addHandler(carto_handler)
 
 
 def build_wkt(geom_code, geometries):
@@ -208,6 +238,9 @@ class VersionHandler(BaseHandler):
         """
         Return the version of the service, currently hardcoded.
         """
+        request_id = self.request.headers.get('x-socrata-requestid', '')
+        LogWrapper.ENV['X-Socrata-RequestId'] = request_id
+
         logger = get_logger()
 
         logger.info('Alive!')
@@ -263,6 +296,10 @@ class RenderHandler(BaseHandler):
                 """
                 Process the XML returned by the style renderer.
                 """
+                if response.body is None:
+                    raise ServiceError('Failed to contact style-renderer',
+                                       500)
+
                 xml = response.body
 
                 logger.info('zoom: %d, len(pbf): %d, len(xml): %d',
@@ -282,13 +319,13 @@ def main():  # pragma: no cover
     Listens on 4096.
     """
     define('port', default=4096)
-    define('log_config_file',
-           default='logging.ini',
-           help='Config file for `logging.config`')
     define('style_host', default='localhost')
     define('style_port', default=4097)
+    define('log_level', default='INFO')
+    define('log_format', default='%(asctime)s %(levelname)s [%(thread)d] ' +
+           '[%(X-Socrata-RequestId)s] %(name)s.%(funcName)s %(message)s')
     parse_command_line()
-    log_config.fileConfig(options.log_config_file)
+    init_logging()
 
     routes = [
         web.url(r'/', web.RedirectHandler, {'url': '/version'}),
