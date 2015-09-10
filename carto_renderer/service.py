@@ -2,19 +2,18 @@
 """
 Service to render pngs from vector tiles using Carto CSS.
 """
-import mapnik
-import mapbox_vector_tile
+
+from tornado import web
+from tornado.httpclient import AsyncHTTPClient
 from tornado.ioloop import IOLoop
-from tornado.web import Application, RedirectHandler, RequestHandler, url
+from tornado.options import define, parse_command_line, options
+import mapbox_vector_tile
+import mapnik
 
-import argparse
-import json
-import logging
-import collections
 import base64
-import logging.config
-
-from subprocess import Popen, PIPE
+import collections
+import json
+import urllib
 
 from carto_renderer.errors import BadRequest, JsonKeyError, ServiceError
 from carto_renderer.version import SEMANTIC
@@ -30,43 +29,73 @@ GEOM_TYPES = {
 # Variables for Vector Tiles.
 BASE_ZOOM = 29
 TILE_ZOOM_FACTOR = 16
-LOG_ENV = {'X-Socrata-RequestId': None}
 
 
-class CssRenderer(object):
+class LogWrapper(object):
     """
-    Class to wrap talking to a renderer subprocess.
+    A logging wrapper that includes log environment automatically.
     """
-    def __init__(self):
-        self.renderer = None
-        self.ensure_renderer()
+    ENV = {'X-Socrata-RequestId': None}
 
-    def ensure_renderer(self):
-        """
-        Start a renderer subprocess if one is not alive.
+    def __init__(self, underlying):
+        self.underlying = underlying
 
-        Otherwise do nothing.
-        """
-        if not self.is_alive():
-            self.renderer = Popen(['node', 'style'],
-                                  stdin=PIPE,
-                                  stdout=PIPE,
-                                  stderr=PIPE)
+    def debug(self, *args):
+        """Log a debug statement."""
+        self.underlying.debug(*args, extra=LogWrapper.ENV)
 
-    def is_alive(self):
-        """True if the rendrerer subprocess is alive, False otherwise."""
-        return self.renderer and self.renderer.poll() is None
+    def info(self, *args):
+        """Log an info statement."""
+        self.underlying.info(*args, extra=LogWrapper.ENV)
 
-    def render_css(self, carto_css):
-        """
-        Transform Carto CSS into Mapnik XML.
+    def warn(self, *args):
+        """Log a warning."""
+        self.underlying.warn(*args, extra=LogWrapper.ENV)
 
-        Carto CSS must be formatted on a single line, ending in a line break.
-        """
-        self.ensure_renderer()
+    def exception(self, *args):
+        """Log an exception."""
+        self.underlying.exception(*args, extra=LogWrapper.ENV)
 
-        self.renderer.stdin.write(carto_css)
-        return self.renderer.stdout.readline()
+
+def get_logger(obj=None):
+    """
+    Return a (wrapped) logger with appropriate name.
+    """
+    import logging
+
+    tail = '.' + obj.__class__.__name__ if obj else ''
+    return LogWrapper(logging.getLogger(__package__ + tail))
+
+
+def init_logging():
+    """
+    Initialize logging from config.
+    """
+    import logging
+    import sys
+
+    root_formatter = logging.Formatter(
+        '%(asctime)s %(levelname)s [%(thread)d] ' +
+        '%(name)s.%(funcName)s %(message)s')
+
+    root_handler = logging.StreamHandler(sys.stdout)
+    root_handler.setLevel(options.log_level)
+    root_handler.setFormatter(root_formatter)
+
+    root = logging.getLogger()
+    root.setLevel(options.log_level)
+    root.addHandler(root_handler)
+
+    carto_formatter = logging.Formatter(options.log_format)
+
+    carto_handler = logging.StreamHandler(sys.stdout)
+    carto_handler.setLevel(options.log_level)
+    carto_handler.setFormatter(carto_formatter)
+
+    carto = get_logger().underlying
+    carto.setLevel(options.log_level)
+    carto.propagate = 0
+    carto.addHandler(carto_handler)
 
 
 def build_wkt(geom_code, geometries):
@@ -75,7 +104,7 @@ def build_wkt(geom_code, geometries):
 
     Returns None on failure.
     """
-    logger = logging.getLogger(__package__)
+    logger = get_logger()
     geom_type = GEOM_TYPES.get(geom_code, 'UNKNOWN')
 
     def collapse(coords):
@@ -87,18 +116,18 @@ def build_wkt(geom_code, geometries):
 
         first = coords[0]
         if not isinstance(first, collections.Iterable):
-            return " ".join([str(c / TILE_ZOOM_FACTOR) for c in coords])
+            return ' '.join([str(c / TILE_ZOOM_FACTOR) for c in coords])
         else:
-            return '({})'.format(','.join([collapse(c) for c in coords]))
+            return '(' + (','.join([collapse(c) for c in coords])) + ')'
 
     collapsed = collapse(geometries)
 
     if geom_type == 'UNKNOWN':
-        logger.warn(u"Unknown geometry code: %s", geom_code, extra=LOG_ENV)
+        logger.warn(u'Unknown geometry code: %s', geom_code)
         return None
 
     if geom_type != 'POINT':
-        collapsed = '({})'.format(collapsed)
+        collapsed = '(' + collapsed + ')'
 
     return geom_type + collapsed
 
@@ -110,7 +139,7 @@ def render_png(tile, zoom, xml):
     """
     Render the tile for the given zoom
     """
-    logger = logging.getLogger(__package__)
+    logger = get_logger()
     ctx = mapnik.Context()
 
     map_tile = mapnik.Map(256, 256)
@@ -129,7 +158,7 @@ def render_png(tile, zoom, xml):
 
         for feature in features:
             wkt = build_wkt(feature['type'], feature['geometry'])
-            logger.debug('wkt: %s', wkt, extra=LOG_ENV)
+            logger.debug('wkt: %s', wkt)
             feat = mapnik.Feature(ctx, 0)
             if wkt:
                 feat.add_geometries_from_wkt(wkt)
@@ -141,10 +170,10 @@ def render_png(tile, zoom, xml):
     image = mapnik.Image(map_tile.width, map_tile.height)
     mapnik.render(map_tile, image)
 
-    return image.tostring("png")
+    return image.tostring('png')
 
 
-class BaseHandler(RequestHandler):
+class BaseHandler(web.RequestHandler):
     # pylint: disable=abstract-method
     """
     Convert ServiceErrors to HTTP errors.
@@ -153,31 +182,35 @@ class BaseHandler(RequestHandler):
         """
         Extract the json body from self.request.
         """
+        logger = get_logger()
+
         request_id = self.request.headers.get('x-socrata-requestid', '')
-        LOG_ENV['X-Socrata-RequestId'] = request_id
+        LogWrapper.ENV['X-Socrata-RequestId'] = request_id
 
         content_type = self.request.headers.get('content-type', '')
         if not content_type.lower().startswith('application/json'):
-            message = "Invalid Content-Type: '{}'; expected 'application/json'"
-            raise BadRequest(message.format(content_type))
+            message = 'Invalid Content-Type: "{ct}"; ' + \
+                      'expected "application/json"'
+            logger.warn('Invalid Content-Type: "%s"', content_type)
+            raise BadRequest(message.format(ct=content_type))
 
         body = self.request.body
 
         try:
             jbody = json.loads(body)
         except StandardError:
-            raise BadRequest("Could not parse JSON.", body)
+            logger.warn('Invalid JSON')
+            raise BadRequest('Could not parse JSON.', body)
         return jbody
 
     def _handle_request_exception(self, err):
         """
         Convert ServiceErrors to HTTP errors.
         """
-        logger = logging.getLogger("{}.{}".format(__package__,
-                                                  self.__class__.__name__))
+        logger = get_logger()
 
         payload = {}
-        logger.exception(err, extra=LOG_ENV)
+        logger.exception(err)
         if isinstance(err, ServiceError):
             status_code = err.status_code
             if err.request_body:
@@ -205,40 +238,18 @@ class VersionHandler(BaseHandler):
         """
         Return the version of the service, currently hardcoded.
         """
-        logger = logging.getLogger('{}.{}'.format(__package__,
-                                                  self.__class__.__name__))
-        logger.info('Alive!', extra=LOG_ENV)
+        request_id = self.request.headers.get('x-socrata-requestid', '')
+        LogWrapper.ENV['X-Socrata-RequestId'] = request_id
+
+        logger = get_logger()
+
+        logger.info('Alive!')
         self.write(VersionHandler.version)
         self.finish()
 
 
-class StyleHandler(BaseHandler):
-    # pylint: disable=abstract-method
-    """
-    Convert Carto CSS passed in via the `$style` query param
-    into Mapnik XML.
-    """
-    def initialize(self, css_renderer):
-        # pylint: disable=arguments-differ
-        """Magic Tornado replacement for __init__."""
-        self.css_renderer = css_renderer
-
-    def post(self):
-        """
-        Convert Carto CSS passed in via the `$style` query param
-        into Mapnik XML.
-        """
-        jbody = self.extract_jbody()
-
-        if 'style' in jbody:
-            self.write(self.css_renderer.render_css(jbody['style']))
-            self.finish()
-        else:
-            raise JsonKeyError('style', jbody)
-
-
 class RenderHandler(BaseHandler):
-    # pylint: disable=abstract-method
+    # pylint: disable=abstract-method, arguments-differ
     """
     Actually render the png.
 
@@ -246,32 +257,59 @@ class RenderHandler(BaseHandler):
     """
     keys = ['bpbf', 'zoom', 'style']
 
-    def initialize(self, css_renderer):
-        # pylint: disable=arguments-differ
-        """Magic Tornado replacement for __init__."""
-        self.css_renderer = css_renderer
+    def initialize(self, http_client, style_host, style_port):
+        """Magic Tornado __init__ replacement."""
+        self.http_client = http_client
+        self.style_host = style_host
+        self.style_port = style_port
 
+    @web.asynchronous
     def post(self):
         """
         Actually render the png.
 
         Expects a JSON blob with 'style', 'zoom', and 'bpbf' values.
         """
+        logger = get_logger()
+
         jbody = self.extract_jbody()
 
         if not all([k in jbody for k in self.keys]):
+            logger.warn('Invalid JSON: %s', jbody)
             raise JsonKeyError(self.keys, jbody)
         else:
             try:
                 zoom = int(jbody['zoom'])
             except:
-                raise BadRequest("'zoom' must be an integer.",
+                logger.warn('Invalid JSON; zoom must be an integer: %s', jbody)
+                raise BadRequest('"zoom" must be an integer.',
                                  request_body=jbody)
+            path = 'http://{host}:{port}/style?style={css}'.format(
+                host=self.style_host,
+                port=self.style_port,
+                css=urllib.quote_plus(jbody['style']))
+
             pbf = base64.b64decode(jbody['bpbf'])
             tile = mapbox_vector_tile.decode(pbf)
-            xml = self.css_renderer.render_css(jbody['style'])
-            self.write(render_png(tile, zoom, xml))
-            self.finish()
+
+            def handle_response(response):
+                """
+                Process the XML returned by the style renderer.
+                """
+                if response.body is None:
+                    raise ServiceError('Failed to contact style-renderer',
+                                       500)
+
+                xml = response.body
+
+                logger.info('zoom: %d, len(pbf): %d, len(xml): %d',
+                            zoom,
+                            len(pbf),
+                            len(xml))
+                self.write(render_png(tile, zoom, xml))
+                self.finish()
+
+            self.http_client.fetch(path, callback=handle_response)
 
 
 def main():  # pragma: no cover
@@ -280,31 +318,30 @@ def main():  # pragma: no cover
 
     Listens on 4096.
     """
-    parser = argparse.ArgumentParser(
-        description="A rendering service for vector tiles using Mapnik.")
-    parser.add_argument('--log-config-file',
-                        dest='log_config_file',
-                        default='logging.ini',
-                        help='Config file for `logging.config`')
-    args = parser.parse_args()
-    logging.config.fileConfig(args.log_config_file)
-
-    handler_opts = {
-        'css_renderer': CssRenderer()
-    }
+    define('port', default=4096)
+    define('style_host', default='localhost')
+    define('style_port', default=4097)
+    define('log_level', default='INFO')
+    define('log_format', default='%(asctime)s %(levelname)s [%(thread)d] ' +
+           '[%(X-Socrata-RequestId)s] %(name)s.%(funcName)s %(message)s')
+    parse_command_line()
+    init_logging()
 
     routes = [
-        url(r'/', RedirectHandler, {'url': '/version'}),
-        url(r'/version', VersionHandler),
-        url(r'/style', StyleHandler, handler_opts),
-        url(r'/render', RenderHandler, handler_opts),
+        web.url(r'/', web.RedirectHandler, {'url': '/version'}),
+        web.url(r'/version', VersionHandler),
+        web.url(r'/render', RenderHandler, {
+            'style_host': options.style_host,
+            'style_port': options.style_port,
+            'http_client': AsyncHTTPClient()
+        }),
     ]
 
-    app = Application(routes)
-    app.listen(4096)
-    logger = logging.getLogger(__package__)
-    logger.info("Listening on localhost:4096...", extra=LOG_ENV)
-    IOLoop.current().start()
+    app = web.Application(routes)
+    app.listen(options.port)
+    logger = get_logger()
+    logger.info('Listening on localhost:4096...')
+    IOLoop.instance().start()
 
-if __name__ == "__main__":  # pragma: no cover
+if __name__ == '__main__':  # pragma: no cover
     main()

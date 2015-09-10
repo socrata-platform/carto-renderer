@@ -27,19 +27,12 @@ class JsonKeyError(ServiceError):
     """
     Error to throw when keys are missing.
     """
-    singular = "Request JSON must contain the key '{}'."
-    plural = "Request JSON must contain the keys '{}' and '{}'."
+    msg = "Request JSON must contain the keys '{}' and '{}'."
 
     def __init__(self, keys, blob):
-        message = ""
-        if str(keys) == keys:
-            keys = [keys]
+        message = ''
 
-        if len(keys) == 1:
-            message = JsonKeyError.singular.format(keys[0])
-        else:
-            beg = keys[:-1]
-            message = JsonKeyError.plural.format('", "'.join(beg),
-                                                 keys[-1])
+        beg = keys[:-1]
+        message = JsonKeyError.msg.format("', '".join(beg), keys[-1])
 
         super(JsonKeyError, self).__init__(message, 400, request_body=blob)

@@ -4,19 +4,33 @@ renders vector tiles into images using CartoCSS.
 
 You can exercise it with the following curl commands.
 
-Transform CartoCSS to MapnikXML.
+## Installation ##
+Install Mapnik (OSX):
 ```
-curl localhost:4096/style -H 'Content-type: application/json' -d @carto_renderer/examples/main.json
+brew tap homebrew/versions
+brew update
+brew install mapnik2
 ```
 
+Install Mapnik (Debian/Ubuntu):
+```
+sudo apt-get install python-mapnik2
+```
+
+Install Python Dependencies:
+```
+pip install -r requirements.txt
+```
+
+## Start the Service ##
+```
+PYTHONPATH=. carto_renderer/service.py
+```
+
+## Examples ##
 Render an image to `test.png`:
 ```
 curl -o test.png localhost:4096/render -H 'Content-type: application/json' -d @carto_renderer/examples/main.json
-```
-
-## Start the Service (dev server) ##
-```
-PYTHONPATH=. carto_renderer/service.py
 ```
 
 ## Testing ##
@@ -24,7 +38,7 @@ The tests are run using py.test and hypothesis
 
 You can install them by running:
 ```
-pip install pytest hypothesis
+pip install 
 ```
 
 Run tests from the root directory:

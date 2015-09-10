@@ -1,6 +1,8 @@
 # pylint: disable=missing-docstring,line-too-long,import-error,abstract-method
 import json
 import platform
+import string
+import urllib
 
 from base64 import b64encode
 from hypothesis import assume, given
@@ -21,7 +23,7 @@ except NameError:               # pragma: no cover
     unicode = str
 
 from carto_renderer import service, errors
-from carto_renderer.service import CssRenderer, GEOM_TYPES, build_wkt
+from carto_renderer.service import GEOM_TYPES, build_wkt
 
 POINT_LISTS = lists(integers(), 2, 2, 2)
 SHELL_LISTS = lists(POINT_LISTS, 1, 10, 100)
@@ -32,15 +34,22 @@ def render_pair(pair):
     return "{} {}".format(pair[0], pair[1])
 
 
-class StrRenderer(object):
+class MockClient(object):
     # pylint: disable=too-few-public-methods
-    def __init__(self, xml):
-        self.xml = xml
-        self.css = None
+    class MockResp(object):
+        def __init__(self, body):
+            self.body = body
 
-    def render_css(self, css):
-        self.css = css
-        return self.xml
+    def __init__(self, style, xml):
+        self.resp = MockClient.MockResp(xml)
+        self.style = style
+
+    def __call__(self):
+        return self
+
+    def fetch(self, path, callback):
+        assert path.endswith(urllib.quote_plus(self.style))
+        callback(self.resp)
 
 
 class StringHandler(RequestHandler):
@@ -56,6 +65,10 @@ class StringHandler(RequestHandler):
         self.request = self
         self.headers = {}
         self.body = None
+
+    # Stop @web.asynchronous from swallowing exceptions!
+    def _stack_context_handle_exception(self, *_):
+        raise
 
     def clear(self):
         self.written = []
@@ -87,50 +100,22 @@ class VersionStrHandler(service.VersionHandler, StringHandler):
     pass
 
 
-class StyleStrHandler(service.StyleHandler, StringHandler):
-    def __init__(self, renderer=None):
-        StringHandler.__init__(self, css_renderer=renderer)
-        self.jbody = None
-
-    def extract_jbody(self):
-        if self.jbody:
-            return self.jbody
-        else:
-            return service.StyleHandler.extract_jbody(self)
-
-
 class RenderStrHandler(service.RenderHandler, StringHandler):
-    def __init__(self, renderer=None):
-        StringHandler.__init__(self, css_renderer=renderer)
+    def initialize(self):
+        pass
+
+    def __init__(self):
+        StringHandler.__init__(self)
         self.jbody = None
+        self.http_client = None
+        self.style_host = None
+        self.style_port = None
 
     def extract_jbody(self):
         if self.jbody:
             return self.jbody
         else:
             return service.RenderHandler.extract_jbody(self)
-
-
-def test_render_css():
-    expected = '<?xml version="1.0" encoding="utf-8"?><!DOCTYPE Map[]><Map><Style name="main" filter-mode="first"><Rule><MarkersSymbolizer stroke="#0000cc" width="1" /></Rule></Style><Layer name="main"><StyleName>main</StyleName></Layer></Map>\n'  # noqa
-    oneline = "#main{marker-line-color:#00C;marker-width:1}"
-    multiline = """#main{
-    marker-line-color:#00C;
-    marker-width:1
-    } """
-
-    renderer = CssRenderer()
-    assert renderer.render_css(oneline) == expected
-    assert renderer.render_css(multiline) == expected
-
-
-def test_ensure_renderer():
-    renderer = CssRenderer()
-    expected = renderer.renderer
-    renderer.ensure_renderer()
-
-    actual = renderer.renderer
-    assert actual == expected
 
 
 @given(integers())
@@ -168,10 +153,6 @@ def test_build_wkt_line_polygon(shells):
     point_str = [','.join([render_pair(p) for p in points])
                  for points in shells]
     assert wkt == 'POLYGON((({})))'.format('),('.join(point_str))
-
-
-def test_render_bad_wkt():
-    pass
 
 
 @given(text(), integers(), text())
@@ -223,15 +204,6 @@ def test_base_handler_bad_req():
     assert "could not parse" in bad_json.value.message.lower()
 
 
-def test_style_handler_bad_req():
-    with raises(errors.JsonKeyError) as no_key:
-        style = StyleStrHandler()
-        style.request.headers['content-type'] = 'application/json'
-        style.body = '{}'
-        style.post()
-    assert "style" in no_key.value.message.lower()
-
-
 def test_render_handler_bad_req():
     keys = ["bpbf", "zoom", "style"]
 
@@ -276,24 +248,27 @@ def test_render_handler_bad_req():
     assert "int" in bad_zoom.value.message.lower()
 
 
-@given(text(), text())
-def test_style_handler(jbody, xml):
-    # pylint: disable=attribute-defined-outside-init
-    renderer = StrRenderer(xml)
-    style = StyleStrHandler(renderer=renderer)
-    style.jbody = {'style': jbody}
-    style.post()
-
-    assert xml == style.was_written()
-    assert style.finished
-
-
-# pylint: disable=line-too-long
-def test_render_handler():
+@given(text(alphabet=string.printable),
+       text(alphabet=string.printable))
+def test_render_handler(host, port):
     """
     This is a simple regression test, it only hits one case.
     """
-    handler = RenderStrHandler(renderer=CssRenderer())
+    handler = RenderStrHandler()
+    xml = """<?xml version="1.0" encoding="utf-8"?>
+    <!DOCTYPE Map[]>
+    <Map>
+      <Style name="main" filter-mode="first">
+        <Rule>
+          <MarkersSymbolizer stroke="#0000cc" width="1" />
+        </Rule>
+      </Style>
+      <Layer name="main">
+        <StyleName>main</StyleName>
+      </Layer>
+    </Map>
+    """
+
     css = '#main{marker-line-color:#00C;marker-width:1}'
     layer = {
         "name": "main",
@@ -306,13 +281,53 @@ def test_render_handler():
     }
     tile = b64encode(tile_encode([layer]))
     handler.jbody = {'zoom': 14, 'style': css, 'bpbf': tile}
+    handler.http_client = MockClient(css, xml)
+    handler.style_host = str(host)
+    handler.style_port = str(port)
+
     handler.post()
-    if platform.system() == 'Darwin':  # noqa
-        expected = """iVBORw0KGgoAAAANSUhEUgAAAQAAAAEACAYAAABccqhmAAABOklEQVR4nO3VsQ2AMAxFwYTsv1kYgkkcECMg8YvcSe5fY7s1AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAvqmRLgAiZr1TR7oE+N2z/Od1H4CeLgEifH8A2MIC2WYLFCJC8r4AAAAASUVORK5CYII="""  # noqa
-    elif platform.system() == 'Linux':
-        expected = """iVBORw0KGgoAAAANSUhEUgAAAQAAAAEACAYAAABccqhmAAABPUlEQVR4nO3VsQ2AMBAEQWP678wU4QZowX5qQOICZqTPL9pvDQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAgHfWmV4ARIxVd1cEenoJ8LknANesABzpJUCE7w8Av7AByiMLAy0uJsQAAAAASUVORK5CYII="""  # noqa
-    else:
+
+    if platform.system() == 'Darwin':  # pragma: no cover
+        expected = (
+            'iVBORw0KGgoAAAANSUhEUgAAAQAAAAEACAYAAABccqhmAAABOklEQVR' +
+            '4nO3VsQ2AMAxFwYTsv1kYgkkcECMg8YvcSe5fY7s1' + ('A' * 332) +
+            'vqmRLgAiZr1TR7oE+N2z/Od1H4CeLgEifH8A2MIC2WYLFCJC8r4AAAA' +
+            'ASUVORK5CYII=')
+    elif platform.system() == 'Linux':  # pragma: no cover
+        expected = (
+            'iVBORw0KGgoAAAANSUhEUgAAAQAAAAEACAYAAABccqhmAAABPUlEQVR' +
+            '4nO3VsQ2AMBAEQWP678wU4QZowX5qQOICZqTPL9pvDQ' + ('A' * 330) +
+            'gHfWmV4ARIxVd1cEenoJ8LknANesABzpJUCE7w8Av7AByiMLAy0uJsQ' +
+            'AAAAASUVORK5CYII=')
+    else:                       # pragma: no cover
         raise NotImplementedError("Unknown platform!")
 
     assert handler.finished
     assert handler.was_written_b64() == expected
+
+
+@given(text(alphabet=string.printable),
+       text(alphabet=string.printable))
+def test_render_handler_no_xml(host, port):
+    css = '#main{marker-line-color:#00C;marker-width:1}'
+    layer = {
+        "name": "main",
+        "features": [
+            {
+                "geometry": "POINT(50 50)",
+                "properties": {}
+            }
+        ]
+    }
+    tile = b64encode(tile_encode([layer]))
+
+    handler = RenderStrHandler()
+    handler.jbody = {'zoom': 14, 'style': css, 'bpbf': tile}
+    handler.http_client = MockClient(css, None)
+    handler.style_host = str(host)
+    handler.style_port = str(port)
+
+    with raises(errors.ServiceError) as no_xml:
+        handler.post()
+
+    assert "style-renderer" in no_xml.value.message.lower()

@@ -1,4 +1,0 @@
-mapbox-vector-tile
-tornado
-# mapbox 2.2.0 will also need to be installed however,
-# installing it via pip is challenging to say the least.
