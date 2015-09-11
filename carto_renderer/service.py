@@ -298,7 +298,7 @@ class RenderHandler(BaseHandler):
                 """
                 if response.body is None:
                     raise ServiceError(
-                        'Failed to contact style-renderer at "{url}"'.format(
+                        "Failed to contact style-renderer at '{url}'".format(
                             url=path),
                         503)
 
