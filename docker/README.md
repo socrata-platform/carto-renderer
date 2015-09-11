@@ -17,7 +17,18 @@ cp -r ../carto_renderer .
 docker build --rm -t carto-renderer .
 ```
 
+## Required Environment Variables ##
+* `STYLE_HOST` - The style renderer host.
+* `STYLE_PORT` - The style renderer port.
+
 ## Running ##
 ```
-docker run -p 4096:4096 -d carto-renderer
+docker run -p 4096:4096 -e STYLE_HOST=<HOST> -e STYLE_PORT=<PORT> -d carto-renderer
+```
+
+```
+docker run -p 4096:4096 \
+-e STYLE_HOST='carto-renderer.app.marathon.aws-us-west-2-staging.socrata.net' \
+-e STYLE_PORT=80 \
+-d carto-renderer
 ```
