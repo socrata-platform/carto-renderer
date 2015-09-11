@@ -297,8 +297,10 @@ class RenderHandler(BaseHandler):
                 Process the XML returned by the style renderer.
                 """
                 if response.body is None:
-                    raise ServiceError('Failed to contact style-renderer',
-                                       500)
+                    raise ServiceError(
+                        'Failed to contact style-renderer at "{url}"'.format(
+                            url=path),
+                        503)
 
                 xml = response.body
 
