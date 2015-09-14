@@ -6,3 +6,4 @@ frozen.txt
 .Python
 venv/
 docker/carto_renderer
+flycheck_*
