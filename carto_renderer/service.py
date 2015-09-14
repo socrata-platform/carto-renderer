@@ -8,12 +8,19 @@ from tornado.httpclient import AsyncHTTPClient
 from tornado.ioloop import IOLoop
 from tornado.options import define, parse_command_line, options
 import mapbox_vector_tile
-import mapnik
+# Only installed for Python 2.
+# (Installing for Python 3 is difficult, but possible...)
+import mapnik                   # pylint: disable=import-error
+
+try:
+    from urllib import quote_plus  # pylint: disable=no-name-in-module
+except ImportError:
+    from urllib.parse import quote_plus
 
 import base64
 import collections
 import json
-import urllib
+
 
 from carto_renderer.errors import BadRequest, JsonKeyError, ServiceError
 from carto_renderer.version import SEMANTIC
@@ -146,7 +153,7 @@ def render_png(tile, zoom, xml):
     # scale_denom = 1 << (BASE_ZOOM - int(zoom or 1))
     # scale_factor = scale_denom / map_tile.scale_denominator()
 
-    # map_tile.zoom(scale_factor)  # TODO: Is overriden by zoom_to_box.
+    # map_tile.zoom(scale_factor)  # Is overriden by zoom_to_box.
     mapnik.load_map_from_string(map_tile, xml)
     map_tile.zoom_to_box(mapnik.Box2d(0, 0, 255, 255))
 
@@ -198,7 +205,7 @@ class BaseHandler(web.RequestHandler):
 
         try:
             jbody = json.loads(body)
-        except StandardError:
+        except Exception:
             logger.warn('Invalid JSON')
             raise BadRequest('Could not parse JSON.', body)
         return jbody
@@ -287,7 +294,7 @@ class RenderHandler(BaseHandler):
             path = 'http://{host}:{port}/style?style={css}'.format(
                 host=self.style_host,
                 port=self.style_port,
-                css=urllib.quote_plus(jbody['style']))
+                css=quote_plus(jbody['style']))
 
             pbf = base64.b64decode(jbody['bpbf'])
             tile = mapbox_vector_tile.decode(pbf)
