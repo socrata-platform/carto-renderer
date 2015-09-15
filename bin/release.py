@@ -72,19 +72,20 @@ def main():
 
     ver_file = join(app_dir, 'carto_renderer', 'version.py')
     set_version(ver_file, cur_version, release_version)
-    git('add', ver_file)
-    git('commit', '-m', 'Setting version to ' + release_version)
-    git('tag', 'v' + release_version)
+    git.add(ver_file)
+
+    git.commit('-m', 'Setting version to ' + release_version)
+    git.tag('v' + release_version)
 
     set_version(ver_file, release_version, next_version)
-    git('add', ver_file)
-    git('commit', '-m' 'Setting version to ' + next_version)
+    git.add(ver_file)
+    git.commit('-m' 'Setting version to ' + next_version)
 
     do_push = prompt('Push changes to the remote repository (y/n)? [y]:',
                      '.*', None, 'y')
 
     if do_push.lower().startswith('y'):
-        print(git('push'))
-        print(git('push', '--tags'))
+        print(git.push())
+        print(git.push('--tags'))
 
 main()
