@@ -239,7 +239,20 @@ class VersionHandler(BaseHandler):
     """
     Return the version of the service, currently hardcoded.
     """
-    version = {'health': 'alive', 'version': SEMANTIC}
+    import sys
+
+    build_time = None
+
+    try:
+        with open('build-time.txt') as build_file:
+            build_time = build_file.readline().rstrip()
+    except IOError:
+        build_time = 'UNKNOWN'
+
+    version = {'health': 'alive',
+               'pythonVersion': sys.version,
+               'version': SEMANTIC,
+               'buildTime': build_time}
 
     def get(self):
         """

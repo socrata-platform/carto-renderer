@@ -5,7 +5,7 @@ Python script to duplicate the logic of sbt-release.
 import pytest
 import sys
 from os.path import abspath, dirname, join
-from sh import git
+from sh import git              # pylint: disable=import-error
 
 
 def set_version(file_name, from_ver, to_ver):
@@ -28,7 +28,7 @@ def prompt(message, pattern, invalid, default):
 
     result = None
     while not result:
-        if sys.version_info[0] == 2:
+        if sys.version_info.major == 2:
             line = raw_input(message)  # pylint: disable=undefined-variable
         else:
             line = input(message)

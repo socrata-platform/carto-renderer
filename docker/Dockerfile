@@ -12,3 +12,4 @@ RUN pip install -r /app/frozen.txt
 
 COPY ship.d /etc/ship.d/
 ADD carto_renderer /app/carto_renderer
+RUN date -u +"%Y-%m-%dT%H:%M:%SZ" > build-time.txt
