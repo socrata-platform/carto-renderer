@@ -13,9 +13,9 @@ import mapbox_vector_tile
 import mapnik                   # pylint: disable=import-error
 
 try:
-    from urllib import quote_plus  # pylint: disable=no-name-in-module
-except ImportError:
     from urllib.parse import quote_plus
+except ImportError:
+    from urllib import quote_plus  # pylint: disable=no-name-in-module
 
 import base64
 import collections
@@ -23,7 +23,7 @@ import json
 
 
 from carto_renderer.errors import BadRequest, JsonKeyError, ServiceError
-from carto_renderer.version import SEMANTIC
+from carto_renderer.version import BUILD_TIME, SEMANTIC
 
 __package__ = 'carto_renderer'  # pylint: disable=redefined-builtin
 
@@ -72,37 +72,6 @@ def get_logger(obj=None):
 
     tail = '.' + obj.__class__.__name__ if obj else ''
     return LogWrapper(logging.getLogger(__package__ + tail))
-
-
-def init_logging():
-    """
-    Initialize logging from config.
-    """
-    import logging
-    import sys
-
-    root_formatter = logging.Formatter(
-        '%(asctime)s %(levelname)s [%(thread)d] ' +
-        '%(name)s.%(funcName)s %(message)s')
-
-    root_handler = logging.StreamHandler(sys.stdout)
-    root_handler.setLevel(options.log_level)
-    root_handler.setFormatter(root_formatter)
-
-    root = logging.getLogger()
-    root.setLevel(options.log_level)
-    root.addHandler(root_handler)
-
-    carto_formatter = logging.Formatter(options.log_format)
-
-    carto_handler = logging.StreamHandler(sys.stdout)
-    carto_handler.setLevel(options.log_level)
-    carto_handler.setFormatter(carto_formatter)
-
-    carto = get_logger().underlying
-    carto.setLevel(options.log_level)
-    carto.propagate = 0
-    carto.addHandler(carto_handler)
 
 
 def build_wkt(geom_code, geometries):
@@ -241,18 +210,12 @@ class VersionHandler(BaseHandler):
     """
     import sys
 
-    build_time = None
-
-    try:
-        with open('build-time.txt') as build_file:
-            build_time = build_file.readline().rstrip()
-    except IOError:
-        build_time = 'UNKNOWN'
+    (major, minor, micro, _, _) = sys.version_info
 
     version = {'health': 'alive',
-               'pythonVersion': sys.version,
+               'pythonVersion': '{}.{}.{}'.format(major, minor, micro),
                'version': SEMANTIC,
-               'buildTime': build_time}
+               'buildTime': BUILD_TIME}
 
     def get(self):
         """
@@ -279,9 +242,9 @@ class RenderHandler(BaseHandler):
 
     def initialize(self, http_client, style_host, style_port):
         """Magic Tornado __init__ replacement."""
-        self.http_client = http_client
-        self.style_host = style_host
-        self.style_port = style_port
+        self.http_client = http_client  # pragma: no cover
+        self.style_host = style_host    # pragma: no cover
+        self.style_port = style_port    # pragma: no cover
 
     @web.asynchronous
     def post(self):
@@ -332,6 +295,37 @@ class RenderHandler(BaseHandler):
                 self.finish()
 
             self.http_client.fetch(path, callback=handle_response)
+
+
+def init_logging():             # pragma: no cover
+    """
+    Initialize logging from config.
+    """
+    import logging
+    import sys
+
+    root_formatter = logging.Formatter(
+        '%(asctime)s %(levelname)s [%(thread)d] ' +
+        '%(name)s.%(funcName)s %(message)s')
+
+    root_handler = logging.StreamHandler(sys.stdout)
+    root_handler.setLevel(options.log_level)
+    root_handler.setFormatter(root_formatter)
+
+    root = logging.getLogger()
+    root.setLevel(options.log_level)
+    root.addHandler(root_handler)
+
+    carto_formatter = logging.Formatter(options.log_format)
+
+    carto_handler = logging.StreamHandler(sys.stdout)
+    carto_handler.setLevel(options.log_level)
+    carto_handler.setFormatter(carto_formatter)
+
+    carto = get_logger().underlying
+    carto.setLevel(options.log_level)
+    carto.propagate = 0
+    carto.addHandler(carto_handler)
 
 
 def main():  # pragma: no cover

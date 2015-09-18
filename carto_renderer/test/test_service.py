@@ -2,7 +2,6 @@
 import json
 import platform
 import string
-import urllib
 
 from base64 import b64encode
 from hypothesis import assume, given
@@ -15,6 +14,11 @@ try:
     from unittest import mock   # pylint: disable=no-name-in-module
 except ImportError:
     import mock
+
+try:
+    from urllib.parse import quote_plus
+except ImportError:
+    from urllib import quote_plus  # pylint: disable=no-name-in-module
 
 try:
     unicode
@@ -44,11 +48,8 @@ class MockClient(object):
         self.resp = MockClient.MockResp(xml)
         self.style = style
 
-    def __call__(self):
-        return self
-
     def fetch(self, path, callback):
-        assert path.endswith(urllib.quote_plus(self.style))
+        assert path.endswith(quote_plus(self.style))
         callback(self.resp)
 
 
@@ -180,6 +181,8 @@ def test_version_handler():
     assert 'health' in ver.was_written()
     assert 'alive' in ver.was_written()
     assert 'version' in ver.was_written()
+    assert 'pythonVersion' in ver.was_written()
+    assert 'buildTime' in ver.was_written()
     assert ver.finished
 
 
