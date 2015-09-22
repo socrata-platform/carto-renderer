@@ -65,7 +65,7 @@ def main():
     default_next = '.'.join([str(s) for s in split_version]) + '-SNAPSHOT'
 
     next_version = prompt(
-        'Next version[' + default_next + ']: ',
+        'Next version [' + default_next + ']: ',
         r'^\d+[.]\d+[.]\d+-SNAPSHOT$',
         'Not a valid SNAPSHOT version!',
         default_next)
@@ -81,7 +81,7 @@ def main():
     git.add(ver_file)
     git.commit('-m' 'Setting version to ' + next_version)
 
-    do_push = prompt('Push changes to the remote repository (y/n)? [y]:',
+    do_push = prompt('Push changes to the remote repository (y/n)? [y]: ',
                      '.*', None, 'y')
 
     if do_push.lower().startswith('y'):
