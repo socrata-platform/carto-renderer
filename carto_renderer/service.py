@@ -136,8 +136,14 @@ def render_png(tile, zoom, xml):
             wkt = build_wkt(feature['type'], feature['geometry'])
             logger.debug('wkt: %s', wkt)
             feat = mapnik.Feature(ctx, 0)
+
             if wkt:
-                feat.add_geometries_from_wkt(wkt)
+                try:
+                    feat.add_geometries_from_wkt(wkt)
+                except RuntimeError as bad_wkt:
+                    logger.error('Invalid WKT: %s', wkt)
+                    raise bad_wkt
+
             source.add_feature(feat)
 
         map_layer.styles.append(name)
