@@ -142,7 +142,7 @@ def test_build_wkt_line_string(points):
     wkt = build_wkt(2, coords)
     assert wkt is not None
     point_str = ','.join([render_pair(p) for p in points])
-    assert wkt == 'LINE_STRING(({}))'.format(point_str)
+    assert wkt == 'MULTILINESTRING(({}))'.format(point_str)
 
 
 @given(lists(SHELL_LISTS, 1, 3, 100))
