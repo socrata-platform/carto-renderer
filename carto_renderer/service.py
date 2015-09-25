@@ -29,7 +29,7 @@ __package__ = 'carto_renderer'  # pylint: disable=redefined-builtin
 
 GEOM_TYPES = {
     1: 'POINT',
-    2: 'LINE_STRING',
+    2: 'MULTILINESTRING',
     3: 'POLYGON'
 }
 
