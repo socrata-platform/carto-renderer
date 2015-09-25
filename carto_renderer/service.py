@@ -28,9 +28,9 @@ from carto_renderer.version import BUILD_TIME, SEMANTIC
 __package__ = 'carto_renderer'  # pylint: disable=redefined-builtin
 
 GEOM_TYPES = {
-    1: 'POINT',
+    1: 'MULTIPOINT',
     2: 'MULTILINESTRING',
-    3: 'POLYGON'
+    3: 'MULTIPOLYGON'
 }
 
 # Variables for Vector Tiles.
@@ -100,14 +100,11 @@ def build_wkt(geom_code, geometries):
         else:
             return '(' + (','.join([collapse(c) for c in coords])) + ')'
 
-    collapsed = collapse(geometries)
+    collapsed = '(' + collapse(geometries) + ')'
 
     if geom_type == 'UNKNOWN':
         logger.warn(u'Unknown geometry code: %s', geom_code)
         return None
-
-    if geom_type != 'POINT':
-        collapsed = '(' + collapsed + ')'
 
     return geom_type + collapsed
 

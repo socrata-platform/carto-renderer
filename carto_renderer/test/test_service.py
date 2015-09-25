@@ -133,7 +133,7 @@ def test_build_wkt_point(coordinates):
     coords = [[c * 16 for c in coordinates]]
     wkt = build_wkt(1, coords)
     assert wkt is not None
-    assert wkt == 'POINT({})'.format(render_pair(coordinates))
+    assert wkt == 'MULTIPOINT(({}))'.format(render_pair(coordinates))
 
 
 @given(SHELL_LISTS)
@@ -153,7 +153,7 @@ def test_build_wkt_line_polygon(shells):
     assert wkt is not None
     point_str = [','.join([render_pair(p) for p in points])
                  for points in shells]
-    assert wkt == 'POLYGON((({})))'.format('),('.join(point_str))
+    assert wkt == 'MULTIPOLYGON((({})))'.format('),('.join(point_str))
 
 
 @given(text(), integers(), text())
