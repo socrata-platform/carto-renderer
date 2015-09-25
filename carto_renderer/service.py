@@ -59,6 +59,10 @@ class LogWrapper(object):
         """Log a warning."""
         self.underlying.warn(*args, extra=LogWrapper.ENV)
 
+    def error(self, *args):
+        """Log an error."""
+        self.underlying.error(*args, extra=LogWrapper.ENV)
+
     def exception(self, *args):
         """Log an exception."""
         self.underlying.exception(*args, extra=LogWrapper.ENV)
