@@ -119,37 +119,37 @@ class RenderStrHandler(service.RenderHandler, StringHandler):
             return service.RenderHandler.extract_jbody(self)
 
 
-@given(text(), integers())
-def test_build_wkt_invalid(layer_name, geom_code):
+@given(integers())
+def test_build_wkt_invalid(geom_code):
     unused = []
 
     assume(geom_code not in GEOM_TYPES)
-    wkt = build_wkt(layer_name, geom_code, unused)
-    assert wkt == layer_name + '(())'
+    wkt = build_wkt(geom_code, unused)
+    assert wkt is None
 
 
-@given(text(), POINT_LISTS)
-def test_build_wkt_point(layer_name, coordinates):
+@given(POINT_LISTS)
+def test_build_wkt_point(coordinates):
     coords = [[c * 16 for c in coordinates]]
-    wkt = build_wkt(layer_name, 1, coords)
+    wkt = build_wkt(1, coords)
     assert wkt is not None
     assert wkt == 'MULTIPOINT(({}))'.format(render_pair(coordinates))
 
 
-@given(text(), SHELL_LISTS)
-def test_build_wkt_line_string(layer_name, points):
+@given(SHELL_LISTS)
+def test_build_wkt_line_string(points):
     coords = [[c * 16 for c in coord] for coord in points]
-    wkt = build_wkt(layer_name, 2, coords)
+    wkt = build_wkt(2, coords)
     assert wkt is not None
     point_str = ','.join([render_pair(p) for p in points])
     assert wkt == 'MULTILINESTRING(({}))'.format(point_str)
 
 
-@given(text(), lists(SHELL_LISTS, 1, 3, 100))
-def test_build_wkt_line_polygon(layer_name, shells):
+@given(lists(SHELL_LISTS, 1, 3, 100))
+def test_build_wkt_line_polygon(shells):
     coords = [[[c * 16 for c in coord]
                for coord in points] for points in shells]
-    wkt = build_wkt(layer_name, 3, coords)
+    wkt = build_wkt(3, coords)
     assert wkt is not None
     point_str = [','.join([render_pair(p) for p in points])
                  for points in shells]
