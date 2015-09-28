@@ -143,7 +143,6 @@ def render_png(tile, zoom, xml):
                     feat.add_geometries_from_wkt(wkt)
                 except RuntimeError:
                     logger.error('Invalid WKT: %s', wkt)
-                    raise
 
             source.add_feature(feat)
 
