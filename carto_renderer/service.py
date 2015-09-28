@@ -78,7 +78,7 @@ def get_logger(obj=None):
     return LogWrapper(logging.getLogger(__package__ + tail))
 
 
-def build_wkt(geom_code, geometries):
+def build_wkt(geom_code, geometries, extra_parens=False):
     """
     Build a Well Known Text of the appropriate type.
 
@@ -106,7 +106,10 @@ def build_wkt(geom_code, geometries):
         logger.warn(u'Unknown geometry code: %s', geom_code)
         return None
 
-    return geom_type + collapsed
+    if extra_parens:
+        return '{gt}({geo})'.format(gt=geom_type, geo=collapsed)
+    else:
+        return geom_type + collapsed
 
 
 def render_png(tile, zoom, xml):
@@ -137,6 +140,15 @@ def render_png(tile, zoom, xml):
             wkt = build_wkt(feature['type'], feature['geometry'])
             logger.debug('wkt: %s', wkt)
             feat = mapnik.Feature(ctx, 0)
+
+            if wkt:
+                try:
+                    feat.add_geometries_from_wkt(wkt)
+                    wkt = None
+                except RuntimeError:
+                    wkt = build_wkt(feature['type'],
+                                    feature['geometry'],
+                                    extra_parens=True)
 
             if wkt:
                 try:

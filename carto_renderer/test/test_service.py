@@ -334,3 +334,95 @@ def test_render_handler_no_xml(host, port):
         handler.post()
 
     assert "style-renderer" in no_xml.value.message.lower()
+
+
+def test_render_png_ignores_bad_wkt():
+    import mapbox_vector_tile
+
+    if platform.system() == 'Darwin':  # pragma: no cover
+        expected = """iVBORw0KGgoAAAANSUhEUgAAAQAAAAEACAYAAABccqhmAAABOklEQVR4nO3VsQ2AMAxFwYTsv1kYgkkcECMg8YvcSe5fY7s1AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAvqmRLgAiZr1TR7oE+N2z/Od1H4CeLgEifH8A2MIC2WYLFCJC8r4AAAAASUVORK5CYII="""  # noqa
+    elif platform.system() == 'Linux':  # pragma: no cover
+        expected = """iVBORw0KGgoAAAANSUhEUgAAAQAAAAEACAYAAABccqhmAAABPUlEQVR4nO3VsQ2AMBAEQWP678wU4QZowX5qQOICZqTPL9pvDQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAgHfWmV4ARIxVd1cEenoJ8LknANesABzpJUCE7w8Av7AByiMLAy0uJsQAAAAASUVORK5CYII="""  # noqa
+    else:                       # pragma: no cover
+        raise NotImplementedError("Unknown platform!")
+
+    layer = {
+        "name": "main",
+        "features": [
+            {
+                "geometry": "POINT(50 50)",
+                "properties": {}
+            },
+            {
+                "geometry": "POINT(0 0)",
+                "properties": {}
+            },
+        ]
+    }
+    tile = mapbox_vector_tile.decode(tile_encode([layer]))
+    xml = """<?xml version="1.0" encoding="utf-8"?>
+    <!DOCTYPE Map[]>
+    <Map>
+      <Style name="main" filter-mode="first">
+        <Rule>
+          <MarkersSymbolizer stroke="#0000cc" width="1" />
+        </Rule>
+      </Style>
+      <Layer name="main">
+        <StyleName>main</StyleName>
+      </Layer>
+    </Map>
+    """
+
+    orig_build_wkt = service.build_wkt
+
+    def new_build_wkt(geom_code, geom, extra_parens=False):
+        if geom == [[0, 0]]:
+            return 'INVALID'
+        else:
+            return orig_build_wkt(geom_code, geom, extra_parens)
+
+    with mock.patch('carto_renderer.service.build_wkt',
+                    new_callable=lambda: new_build_wkt):
+        actual = service.render_png(tile, 1, xml)
+
+    assert b64encode(actual) == expected
+
+
+def test_render_png_adds_omitted_parens():
+    import mapbox_vector_tile
+
+    if platform.system() == 'Darwin':  # pragma: no cover
+        expected = """iVBORw0KGgoAAAANSUhEUgAAAQAAAAEACAYAAABccqhmAAABQ0lEQVR4nO3ToQ2AMABE0ZOwAmE9LAmsCRVMQMIi0BFQrXkvOf/NJQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/HHNSdmSZ+xdAjR37Mn51i29S4DmylTPvyb30LsEaOsDv6EKWF6eRgAAAAAASUVORK5CYII="""  # noqa
+    elif platform.system() == 'Linux':  # pragma: no cover
+        expected = """iVBORw0KGgoAAAANSUhEUgAAAQAAAAEACAYAAABccqhmAAABQ0lEQVR4nO3ToQ2AMABE0ZOwAmE9LAmsCRVMQMIi0BFQrXkvOf/NJQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/HHNSdmSZ+xdAjR37Mn51i29S4DmylTPvyb30LsEaOsDv6EKWF6eRgAAAAAASUVORK5CYII="""
+    else:                       # pragma: no cover
+        raise NotImplementedError("Unknown platform!")
+
+    layer = {
+        "name": "main",
+        "features": [
+            {
+                "geometry": "MULTIPOLYGON (((0  0, 0 50, 50 50, 50 0, 0 0)))",
+                "properties": {}
+            }
+        ]
+    }
+    tile = mapbox_vector_tile.decode(tile_encode([layer]))
+    xml = """<?xml version="1.0" encoding="utf-8"?>
+    <!DOCTYPE Map[]>
+    <Map>
+      <Style name="main" filter-mode="first">
+        <Rule>
+          <MarkersSymbolizer stroke="#0000cc" width="1" />
+        </Rule>
+      </Style>
+      <Layer name="main">
+        <StyleName>main</StyleName>
+      </Layer>
+    </Map>
+    """
+
+    actual = service.render_png(tile, 1, xml)
+
+    assert b64encode(actual) == expected

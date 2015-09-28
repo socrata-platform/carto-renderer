@@ -17,4 +17,4 @@ fi
 
 pip install --upgrade --requirement "dev-requirements.txt"
 
-PYTHONPATH=. py.test carto_renderer
+PYTHONPATH=. py.test -v carto_renderer
