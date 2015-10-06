@@ -19,7 +19,7 @@ sudo apt-get install python-mapnik2
 
 Install Python Dependencies:
 ```
-pip install -r requirements.txt
+pip install -r dev-requirements.txt
 ```
 
 ## Start the Service ##
