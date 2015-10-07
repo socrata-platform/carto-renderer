@@ -38,7 +38,7 @@ The tests are run using py.test and hypothesis
 
 You can install them by running:
 ```
-pip install 
+pip install -r dev-requirements
 ```
 
 Run tests from the root directory:
