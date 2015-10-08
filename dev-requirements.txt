@@ -1,3 +1,4 @@
+msgpack-python
 mapbox-vector-tile
 tornado
 

@@ -23,7 +23,7 @@ class BadRequest(ServiceError):
                                          request_body=request_body)
 
 
-class JsonKeyError(ServiceError):
+class PayloadKeyError(ServiceError):
     """
     Error to throw when keys are missing.
     """
@@ -33,6 +33,6 @@ class JsonKeyError(ServiceError):
         message = ''
 
         beg = keys[:-1]
-        message = JsonKeyError.msg.format("', '".join(beg), keys[-1])
+        message = PayloadKeyError.msg.format("', '".join(beg), keys[-1])
 
-        super(JsonKeyError, self).__init__(message, 400, request_body=blob)
+        super(PayloadKeyError, self).__init__(message, 400, request_body=blob)

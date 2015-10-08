@@ -210,7 +210,7 @@ def test_base_handler_bad_req():
 def test_render_handler_bad_req():
     keys = ["bpbf", "zoom", "style"]
 
-    with raises(errors.JsonKeyError) as empty_json:
+    with raises(errors.PayloadKeyError) as empty_json:
         render = RenderStrHandler()
         render.request.headers['content-type'] = 'application/json'
         render.body = '{}'
@@ -218,7 +218,7 @@ def test_render_handler_bad_req():
     for k in keys:
         assert k in empty_json.value.message.lower()
 
-    with raises(errors.JsonKeyError) as no_style:
+    with raises(errors.PayloadKeyError) as no_style:
         render = RenderStrHandler()
         render.request.headers['content-type'] = 'application/json'
         render.body = '{"zoom": "", "body": ""}'
@@ -226,7 +226,7 @@ def test_render_handler_bad_req():
     for k in keys:
         assert k in no_style.value.message.lower()
 
-    with raises(errors.JsonKeyError) as no_zoom:
+    with raises(errors.PayloadKeyError) as no_zoom:
         render = RenderStrHandler()
         render.request.headers['content-type'] = 'application/json'
         render.body = '{"style": "", "bpbf": ""}'
@@ -234,7 +234,7 @@ def test_render_handler_bad_req():
     for k in keys:
         assert k in no_zoom.value.message.lower()
 
-    with raises(errors.JsonKeyError) as no_bpbf:
+    with raises(errors.PayloadKeyError) as no_bpbf:
         render = RenderStrHandler()
         render.request.headers['content-type'] = 'application/json'
         render.body = '{"style": "", "zoom": ""}'

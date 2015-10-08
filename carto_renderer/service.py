@@ -7,22 +7,16 @@ from tornado import web
 from tornado.httpclient import AsyncHTTPClient
 from tornado.ioloop import IOLoop
 from tornado.options import define, parse_command_line, options
-import mapbox_vector_tile
-# Only installed for Python 2.
-# (Installing for Python 3 is difficult, but possible...)
 import mapnik                   # pylint: disable=import-error
+import msgpack
 
-try:
-    from urllib.parse import quote_plus
-except ImportError:
-    from urllib import quote_plus  # pylint: disable=no-name-in-module
+from urllib import quote_plus
 
 import base64
 import collections
 import json
 
-
-from carto_renderer.errors import BadRequest, JsonKeyError, ServiceError
+from carto_renderer.errors import BadRequest, PayloadKeyError, ServiceError
 from carto_renderer.version import BUILD_TIME, SEMANTIC
 
 __package__ = 'carto_renderer'  # pylint: disable=redefined-builtin
@@ -137,24 +131,13 @@ def render_png(tile, zoom, xml):
         map_layer.datasource = source
 
         for feature in features:
-            wkt = build_wkt(feature['type'], feature['geometry'])
-            logger.debug('wkt: %s', wkt)
             feat = mapnik.Feature(ctx, 0)
 
-            if wkt:
-                try:
-                    feat.add_geometries_from_wkt(wkt)
-                    wkt = None
-                except RuntimeError:
-                    wkt = build_wkt(feature['type'],
-                                    feature['geometry'],
-                                    extra_parens=True)
-
-            if wkt:
-                try:
-                    feat.add_geometries_from_wkt(wkt)
-                except RuntimeError:
-                    logger.error('Invalid WKT: %s', wkt)
+            try:
+                feat.add_geometries_from_wkb(feature)
+                wkt = None
+            except RuntimeError:
+                logger.error('Invalid WKB: %s', wkt)
 
             source.add_feature(feat)
 
@@ -172,30 +155,30 @@ class BaseHandler(web.RequestHandler):
     """
     Convert ServiceErrors to HTTP errors.
     """
-    def extract_jbody(self):
+    def extract_body(self):
         """
-        Extract the json body from self.request.
+        Extract the body from self.request as a dictionary.
         """
         logger = get_logger()
 
         request_id = self.request.headers.get('x-socrata-requestid', '')
         LogWrapper.ENV['X-Socrata-RequestId'] = request_id
 
-        content_type = self.request.headers.get('content-type', '')
-        if not content_type.lower().startswith('application/json'):
+        content_type = self.request.headers.get('content-type', '').lower()
+        if not content_type.startswith('application/octet-stream'):
             message = 'Invalid Content-Type: "{ct}"; ' + \
-                      'expected "application/json"'
+                      'expected"application/octet-stream"'
             logger.warn('Invalid Content-Type: "%s"', content_type)
             raise BadRequest(message.format(ct=content_type))
 
         body = self.request.body
 
         try:
-            jbody = json.loads(body)
+            extracted = msgpack.loads(body)
         except Exception:
-            logger.warn('Invalid JSON')
-            raise BadRequest('Could not parse JSON.', body)
-        return jbody
+            logger.warn('Invalid message')
+            raise BadRequest('Could not parse message.', body)
+        return extracted
 
     def _handle_request_exception(self, err):
         """
@@ -273,25 +256,26 @@ class RenderHandler(BaseHandler):
         """
         logger = get_logger()
 
-        jbody = self.extract_jbody()
+        geobody = self.extract_body()
 
-        if not all([k in jbody for k in self.keys]):
-            logger.warn('Invalid JSON: %s', jbody)
-            raise JsonKeyError(self.keys, jbody)
+        if not all([k in geobody for k in self.keys]):
+            logger.warn('Invalid JSON: %s', geobody)
+            raise PayloadKeyError(self.keys, geobody)
         else:
             try:
-                zoom = int(jbody['zoom'])
+                zoom = int(geobody['zoom'])
             except:
-                logger.warn('Invalid JSON; zoom must be an integer: %s', jbody)
+                logger.warn('Invalid JSON; zoom must be an integer: %s',
+                            geobody)
                 raise BadRequest('"zoom" must be an integer.',
-                                 request_body=jbody)
+                                 request_body=geobody)
             path = 'http://{host}:{port}/style?style={css}'.format(
                 host=self.style_host,
                 port=self.style_port,
-                css=quote_plus(jbody['style']))
+                css=quote_plus(geobody['style']))
 
-            pbf = base64.b64decode(jbody['bpbf'])
-            tile = mapbox_vector_tile.decode(pbf)
+            tile = {layer: [base64.b64decode(wkb) for wkb in wkbs]
+                    for (layer, wkbs) in geobody['tile']}
 
             def handle_response(response):
                 """
@@ -305,9 +289,9 @@ class RenderHandler(BaseHandler):
 
                 xml = response.body
 
-                logger.info('zoom: %d, len(pbf): %d, len(xml): %d',
+                logger.info('zoom: %d, len(tile): %d, len(xml): %d',
                             zoom,
-                            len(pbf),
+                            len(tile),
                             len(xml))
                 self.write(render_png(tile, zoom, xml))
                 self.finish()
