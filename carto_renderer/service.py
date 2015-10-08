@@ -237,9 +237,9 @@ class RenderHandler(BaseHandler):
     """
     Actually render the png.
 
-    Expects a JSON blob with 'style', 'zoom', and 'bpbf' values.
+    Expects a JSON blob with 'style', 'zoom', and 'tile' values.
     """
-    keys = ['bpbf', 'zoom', 'style']
+    keys = ['tile', 'zoom', 'style']
 
     def initialize(self, http_client, style_host, style_port):
         """Magic Tornado __init__ replacement."""
@@ -252,7 +252,7 @@ class RenderHandler(BaseHandler):
         """
         Actually render the png.
 
-        Expects a JSON blob with 'style', 'zoom', and 'bpbf' values.
+        Expects a JSON blob with 'style', 'zoom', and 'tile' values.
         """
         logger = get_logger()
 
