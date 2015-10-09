@@ -1,5 +1,4 @@
 msgpack-python
-mapbox-vector-tile
 tornado
 
 hypothesis # test

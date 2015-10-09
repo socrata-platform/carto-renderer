@@ -13,19 +13,12 @@ import msgpack
 from urllib import quote_plus
 
 import base64
-import collections
 import json
 
 from carto_renderer.errors import BadRequest, PayloadKeyError, ServiceError
 from carto_renderer.version import BUILD_TIME, SEMANTIC
 
 __package__ = 'carto_renderer'  # pylint: disable=redefined-builtin
-
-GEOM_TYPES = {
-    1: 'MULTIPOINT',
-    2: 'MULTILINESTRING',
-    3: 'MULTIPOLYGON'
-}
 
 # Variables for Vector Tiles.
 BASE_ZOOM = 29
@@ -70,40 +63,6 @@ def get_logger(obj=None):
 
     tail = '.' + obj.__class__.__name__ if obj else ''
     return LogWrapper(logging.getLogger(__package__ + tail))
-
-
-def build_wkt(geom_code, geometries, extra_parens=False):
-    """
-    Build a Well Known Text of the appropriate type.
-
-    Returns None on failure.
-    """
-    logger = get_logger()
-    geom_type = GEOM_TYPES.get(geom_code, 'UNKNOWN')
-
-    def collapse(coords):
-        """
-        Helper, collapses lists into strings with appropriate parens.
-        """
-        if len(coords) < 1:
-            return '()'
-
-        first = coords[0]
-        if not isinstance(first, collections.Iterable):
-            return ' '.join([str(c / TILE_ZOOM_FACTOR) for c in coords])
-        else:
-            return '(' + (','.join([collapse(c) for c in coords])) + ')'
-
-    collapsed = '(' + collapse(geometries) + ')'
-
-    if geom_type == 'UNKNOWN':
-        logger.warn(u'Unknown geometry code: %s', geom_code)
-        return None
-
-    if extra_parens:
-        return '{gt}({geo})'.format(gt=geom_type, geo=collapsed)
-    else:
-        return geom_type + collapsed
 
 
 def render_png(tile, zoom, xml):
