@@ -234,7 +234,7 @@ class RenderHandler(BaseHandler):
                 css=quote_plus(geobody['style']))
 
             tile = {layer: [base64.b64decode(wkb) for wkb in wkbs]
-                    for (layer, wkbs) in geobody['tile'].items()}
+                    for layer, wkbs in geobody['tile'].items()}
 
             def handle_response(response):
                 """
