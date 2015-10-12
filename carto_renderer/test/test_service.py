@@ -1,36 +1,26 @@
 # pylint: disable=missing-docstring,line-too-long,import-error,abstract-method
 import json
+import mock
 import platform
 import string
 
 from base64 import b64encode
-from hypothesis import assume, given
-from hypothesis.strategies import integers, lists, text
-from mapbox_vector_tile import encode as tile_encode
+from hypothesis import given
+from hypothesis.strategies import integers, text
 from pytest import raises
 from tornado.web import RequestHandler
-
-try:
-    from unittest import mock   # pylint: disable=no-name-in-module
-except ImportError:
-    import mock
-
-try:
-    from urllib.parse import quote_plus
-except ImportError:
-    from urllib import quote_plus  # pylint: disable=no-name-in-module
-
-try:
-    unicode
-except NameError:               # pragma: no cover
-    # pylint: disable=redefined-builtin,invalid-name
-    unicode = str
+from urllib import quote_plus
 
 from carto_renderer import service, errors
-from carto_renderer.service import GEOM_TYPES, build_wkt
 
-POINT_LISTS = lists(integers(), 2, 2, 2)
-SHELL_LISTS = lists(POINT_LISTS, 1, 10, 100)
+
+def tile_encode(layer):
+    return {k: [b64encode(f) for f in feats] for k, feats in layer.items()}
+
+
+def to_wkb(*wkts):
+    from mapnik import Path, wkbByteOrder  # pylint: disable=no-name-in-module
+    return [Path.from_wkt(wkt).to_wkb(wkbByteOrder.XDR) for wkt in wkts]
 
 
 def render_pair(pair):
@@ -107,53 +97,16 @@ class RenderStrHandler(service.RenderHandler, StringHandler):
 
     def __init__(self):
         StringHandler.__init__(self)
-        self.jbody = None
+        self.body = None
         self.http_client = None
         self.style_host = None
         self.style_port = None
 
-    def extract_jbody(self):
-        if self.jbody:
-            return self.jbody
+    def extract_body(self):
+        if self.body is None:
+            return service.RenderHandler.extract_body(self)
         else:
-            return service.RenderHandler.extract_jbody(self)
-
-
-@given(integers())
-def test_build_wkt_invalid(geom_code):
-    unused = []
-
-    assume(geom_code not in GEOM_TYPES)
-    wkt = build_wkt(geom_code, unused)
-    assert wkt is None
-
-
-@given(POINT_LISTS)
-def test_build_wkt_point(coordinates):
-    coords = [[c * 16 for c in coordinates]]
-    wkt = build_wkt(1, coords)
-    assert wkt is not None
-    assert wkt == 'MULTIPOINT(({}))'.format(render_pair(coordinates))
-
-
-@given(SHELL_LISTS)
-def test_build_wkt_line_string(points):
-    coords = [[c * 16 for c in coord] for coord in points]
-    wkt = build_wkt(2, coords)
-    assert wkt is not None
-    point_str = ','.join([render_pair(p) for p in points])
-    assert wkt == 'MULTILINESTRING(({}))'.format(point_str)
-
-
-@given(lists(SHELL_LISTS, 1, 3, 100))
-def test_build_wkt_line_polygon(shells):
-    coords = [[[c * 16 for c in coord]
-               for coord in points] for points in shells]
-    wkt = build_wkt(3, coords)
-    assert wkt is not None
-    point_str = [','.join([render_pair(p) for p in points])
-                 for points in shells]
-    assert wkt == 'MULTIPOLYGON((({})))'.format('),('.join(point_str))
+            return self.body
 
 
 @given(text(), integers(), text())
@@ -191,61 +144,61 @@ def test_base_handler_bad_req():
 
     with raises(errors.BadRequest) as no_ct:
         base = BaseStrHandler()
-        base.extract_jbody()
+        base.extract_body()
     assert "invalid content-type" in no_ct.value.message.lower()
 
     with raises(errors.BadRequest) as bad_ct:
         base = BaseStrHandler()
         base.request.headers['content-type'] = 'unexpected type!'
-        base.extract_jbody()
+        base.extract_body()
     assert "invalid content-type" in bad_ct.value.message.lower()
 
     with raises(errors.BadRequest) as bad_json:
         base = BaseStrHandler()
-        base.request.headers['content-type'] = 'application/json'
-        base.extract_jbody()
+        base.request.headers['content-type'] = 'application/octet-stream'
+        base.extract_body()
     assert "could not parse" in bad_json.value.message.lower()
 
 
 def test_render_handler_bad_req():
-    keys = ["bpbf", "zoom", "style"]
+    keys = ["tile", "zoom", "style"]
 
-    with raises(errors.JsonKeyError) as empty_json:
+    with raises(errors.PayloadKeyError) as empty_tile:
         render = RenderStrHandler()
-        render.request.headers['content-type'] = 'application/json'
-        render.body = '{}'
+        render.request.headers['content-type'] = 'application/octet-stream'
+        render.body = {}
         render.post()
     for k in keys:
-        assert k in empty_json.value.message.lower()
+        assert k in empty_tile.value.message.lower()
 
-    with raises(errors.JsonKeyError) as no_style:
+    with raises(errors.PayloadKeyError) as no_style:
         render = RenderStrHandler()
-        render.request.headers['content-type'] = 'application/json'
-        render.body = '{"zoom": "", "body": ""}'
+        render.request.headers['content-type'] = 'application/octet-stream'
+        render.body = {"zoom": "", "body": ""}
         render.post()
     for k in keys:
         assert k in no_style.value.message.lower()
 
-    with raises(errors.JsonKeyError) as no_zoom:
+    with raises(errors.PayloadKeyError) as no_zoom:
         render = RenderStrHandler()
-        render.request.headers['content-type'] = 'application/json'
-        render.body = '{"style": "", "bpbf": ""}'
+        render.request.headers['content-type'] = 'application/octet-stream'
+        render.body = {"style": "", "tile": ""}
         render.post()
     for k in keys:
         assert k in no_zoom.value.message.lower()
 
-    with raises(errors.JsonKeyError) as no_bpbf:
+    with raises(errors.PayloadKeyError) as no_tile:
         render = RenderStrHandler()
-        render.request.headers['content-type'] = 'application/json'
-        render.body = '{"style": "", "zoom": ""}'
+        render.request.headers['content-type'] = 'application/octet-stream'
+        render.body = {"style": "", "zoom": ""}
         render.post()
     for k in keys:
-        assert k in no_bpbf.value.message.lower()
+        assert k in no_tile.value.message.lower()
 
     with raises(errors.BadRequest) as bad_zoom:
         render = RenderStrHandler()
-        render.request.headers['content-type'] = 'application/json'
-        render.body = '{"style": "", "zoom": "", "bpbf": ""}'
+        render.request.headers['content-type'] = 'application/octet-stream'
+        render.body = {"style": "", "zoom": "", "tile": ""}
         render.post()
     assert "zoom" in bad_zoom.value.message.lower()
     assert "int" in bad_zoom.value.message.lower()
@@ -274,16 +227,11 @@ def test_render_handler(host, port):
 
     css = '#main{marker-line-color:#00C;marker-width:1}'
     layer = {
-        "name": "main",
-        "features": [
-            {
-                "geometry": "POINT(50 50)",
-                "properties": {}
-            }
-        ]
+        "main": to_wkb("POINT(50 50)")
     }
-    tile = b64encode(tile_encode([layer]))
-    handler.jbody = {'zoom': 14, 'style': css, 'bpbf': tile}
+
+    tile = tile_encode(layer)
+    handler.body = {'zoom': 14, 'style': css, 'tile': tile}
     handler.http_client = MockClient(css, xml)
     handler.style_host = str(host)
     handler.style_port = str(port)
@@ -291,17 +239,9 @@ def test_render_handler(host, port):
     handler.post()
 
     if platform.system() == 'Darwin':  # pragma: no cover
-        expected = (
-            'iVBORw0KGgoAAAANSUhEUgAAAQAAAAEACAYAAABccqhmAAABOklEQVR' +
-            '4nO3VsQ2AMAxFwYTsv1kYgkkcECMg8YvcSe5fY7s1' + ('A' * 332) +
-            'vqmRLgAiZr1TR7oE+N2z/Od1H4CeLgEifH8A2MIC2WYLFCJC8r4AAAA' +
-            'ASUVORK5CYII=')
+        expected = """iVBORw0KGgoAAAANSUhEUgAAAQAAAAEACAYAAABccqhmAAABPklEQVR4nO3WsQmAMBRF0Q+6Q6ps61xOEFLoQDHgCEF/cw68/pYvAgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABYMPaIu2ZXACnaeHeV7BLgd/2YO+cT2LJLAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAPjIAwKMClP4YvSFAAAAAElFTkSuQmCC"""  # noqa
     elif platform.system() == 'Linux':  # pragma: no cover
-        expected = (
-            'iVBORw0KGgoAAAANSUhEUgAAAQAAAAEACAYAAABccqhmAAABPUlEQVR' +
-            '4nO3VsQ2AMBAEQWP678wU4QZowX5qQOICZqTPL9pvDQ' + ('A' * 330) +
-            'gHfWmV4ARIxVd1cEenoJ8LknANesABzpJUCE7w8Av7AByiMLAy0uJsQ' +
-            'AAAAASUVORK5CYII=')
+        expected = """iVBORw0KGgoAAAANSUhEUgAAAQAAAAEACAYAAABccqhmAAABPklEQVR4nO3WsQmAMBRF0Q+6Q6ps61xOEFLoQDHgCEF/cw68/pYvAgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABYMPaIu2ZXACnaeHeV7BLgd/2YO+cT2LJLAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAPjIAwKMClP4YvSFAAAAAElFTkSuQmCC"""  # noqa
     else:                       # pragma: no cover
         raise NotImplementedError("Unknown platform!")
 
@@ -314,18 +254,13 @@ def test_render_handler(host, port):
 def test_render_handler_no_xml(host, port):
     css = '#main{marker-line-color:#00C;marker-width:1}'
     layer = {
-        "name": "main",
-        "features": [
-            {
-                "geometry": "POINT(50 50)",
-                "properties": {}
-            }
-        ]
+        "main": to_wkb("POINT(50 50)")
     }
-    tile = b64encode(tile_encode([layer]))
+
+    tile = tile_encode(layer)
 
     handler = RenderStrHandler()
-    handler.jbody = {'zoom': 14, 'style': css, 'bpbf': tile}
+    handler.body = {'zoom': 14, 'style': css, 'tile': tile}
     handler.http_client = MockClient(css, None)
     handler.style_host = str(host)
     handler.style_port = str(port)
@@ -336,79 +271,18 @@ def test_render_handler_no_xml(host, port):
     assert "style-renderer" in no_xml.value.message.lower()
 
 
-def test_render_png_ignores_bad_wkt():
-    import mapbox_vector_tile
-
+def test_render_png_ignores_bad_wkb():
     if platform.system() == 'Darwin':  # pragma: no cover
-        expected = """iVBORw0KGgoAAAANSUhEUgAAAQAAAAEACAYAAABccqhmAAABOklEQVR4nO3VsQ2AMAxFwYTsv1kYgkkcECMg8YvcSe5fY7s1AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAvqmRLgAiZr1TR7oE+N2z/Od1H4CeLgEifH8A2MIC2WYLFCJC8r4AAAAASUVORK5CYII="""  # noqa
+        expected = """iVBORw0KGgoAAAANSUhEUgAAAQAAAAEACAYAAABccqhmAAABPklEQVR4nO3WsQmAMBRF0Q+6Q6ps61xOEFLoQDHgCEF/cw68/pYvAgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABYMPaIu2ZXACnaeHeV7BLgd/2YO+cT2LJLAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAPjIAwKMClP4YvSFAAAAAElFTkSuQmCC"""  # noqa
     elif platform.system() == 'Linux':  # pragma: no cover
-        expected = """iVBORw0KGgoAAAANSUhEUgAAAQAAAAEACAYAAABccqhmAAABPUlEQVR4nO3VsQ2AMBAEQWP678wU4QZowX5qQOICZqTPL9pvDQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAgHfWmV4ARIxVd1cEenoJ8LknANesABzpJUCE7w8Av7AByiMLAy0uJsQAAAAASUVORK5CYII="""  # noqa
+        expected = """iVBORw0KGgoAAAANSUhEUgAAAQAAAAEACAYAAABccqhmAAABPklEQVR4nO3WsQmAMBRF0Q+6Q6ps61xOEFLoQDHgCEF/cw68/pYvAgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABYMPaIu2ZXACnaeHeV7BLgd/2YO+cT2LJLAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAPjIAwKMClP4YvSFAAAAAElFTkSuQmCC"""  # noqa
     else:                       # pragma: no cover
         raise NotImplementedError("Unknown platform!")
 
-    layer = {
-        "name": "main",
-        "features": [
-            {
-                "geometry": "POINT(50 50)",
-                "properties": {}
-            },
-            {
-                "geometry": "POINT(0 0)",
-                "properties": {}
-            },
-        ]
+    tile = {
+        "main": to_wkb("POINT(50 50)") + ['INVALID']
     }
-    tile = mapbox_vector_tile.decode(tile_encode([layer]))
-    xml = """<?xml version="1.0" encoding="utf-8"?>
-    <!DOCTYPE Map[]>
-    <Map>
-      <Style name="main" filter-mode="first">
-        <Rule>
-          <MarkersSymbolizer stroke="#0000cc" width="1" />
-        </Rule>
-      </Style>
-      <Layer name="main">
-        <StyleName>main</StyleName>
-      </Layer>
-    </Map>
-    """
 
-    orig_build_wkt = service.build_wkt
-
-    def new_build_wkt(geom_code, geom, extra_parens=False):
-        if geom == [[0, 0]]:
-            return 'INVALID'
-        else:
-            return orig_build_wkt(geom_code, geom, extra_parens)
-
-    with mock.patch('carto_renderer.service.build_wkt',
-                    new_callable=lambda: new_build_wkt):
-        actual = service.render_png(tile, 1, xml)
-
-    assert b64encode(actual) == expected
-
-
-def test_render_png_adds_omitted_parens():
-    import mapbox_vector_tile
-
-    if platform.system() == 'Darwin':  # pragma: no cover
-        expected = """iVBORw0KGgoAAAANSUhEUgAAAQAAAAEACAYAAABccqhmAAABQ0lEQVR4nO3ToQ2AMABE0ZOwAmE9LAmsCRVMQMIi0BFQrXkvOf/NJQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/HHNSdmSZ+xdAjR37Mn51i29S4DmylTPvyb30LsEaOsDv6EKWF6eRgAAAAAASUVORK5CYII="""  # noqa
-    elif platform.system() == 'Linux':  # pragma: no cover
-        expected = """iVBORw0KGgoAAAANSUhEUgAAAQAAAAEACAYAAABccqhmAAABQ0lEQVR4nO3ToQ2AMABE0ZOwAmE9LAmsCRVMQMIi0BFQrXkvOf/NJQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/HHNSdmSZ+xdAjR37Mn51i29S4DmylTPvyb30LsEaOsDv6EKWF6eRgAAAAAASUVORK5CYII="""
-    else:                       # pragma: no cover
-        raise NotImplementedError("Unknown platform!")
-
-    layer = {
-        "name": "main",
-        "features": [
-            {
-                "geometry": "MULTIPOLYGON (((0  0, 0 50, 50 50, 50 0, 0 0)))",
-                "properties": {}
-            }
-        ]
-    }
-    tile = mapbox_vector_tile.decode(tile_encode([layer]))
     xml = """<?xml version="1.0" encoding="utf-8"?>
     <!DOCTYPE Map[]>
     <Map>

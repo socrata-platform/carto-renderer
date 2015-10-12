@@ -7,3 +7,4 @@ frozen.txt
 venv/
 docker/carto_renderer
 flycheck_*
+.cache
