@@ -23,6 +23,7 @@ __package__ = 'carto_renderer'  # pylint: disable=redefined-builtin
 # Variables for Vector Tiles.
 BASE_ZOOM = 29
 TILE_ZOOM_FACTOR = 16
+TILE_SIZE = 256
 
 
 class LogWrapper(object):
@@ -65,7 +66,8 @@ def get_logger(obj=None):
     return LogWrapper(logging.getLogger(__package__ + tail))
 
 
-def render_png(tile, zoom, xml):
+def render_png(tile, zoom, xml, overscan):
+    map_tile_size = TILE_SIZE + (overscan * 2)
     # mapnik is installed in a non-standard way.
     # It confuses pylint.
     # pylint: disable=no-member
@@ -75,13 +77,16 @@ def render_png(tile, zoom, xml):
     logger = get_logger()
     ctx = mapnik.Context()
 
-    map_tile = mapnik.Map(256, 256)
+    map_tile = mapnik.Map(map_tile_size, map_tile_size)
     # scale_denom = 1 << (BASE_ZOOM - int(zoom or 1))
     # scale_factor = scale_denom / map_tile.scale_denominator()
-
     # map_tile.zoom(scale_factor)  # Is overriden by zoom_to_box.
+
     mapnik.load_map_from_string(map_tile, xml)
-    map_tile.zoom_to_box(mapnik.Box2d(0, 0, 255, 255))
+
+    box_min = -overscan
+    box_max = TILE_SIZE + overscan - 1
+    map_tile.zoom_to_box(mapnik.Box2d(box_min, box_min, box_max, box_max))
 
     for (name, features) in tile.items():
         name = name.encode('ascii', 'ignore')
@@ -103,8 +108,9 @@ def render_png(tile, zoom, xml):
         map_layer.styles.append(name)
         map_tile.layers.append(map_layer)
 
-    image = mapnik.Image(map_tile.width, map_tile.height)
-    mapnik.render(map_tile, image)
+    image = mapnik.Image(TILE_SIZE, TILE_SIZE)
+    #tile, image, scale, offset_x, offset_y
+    mapnik.render(map_tile, image, 1, overscan, overscan)
 
     return image.tostring('png')
 
@@ -222,12 +228,19 @@ class RenderHandler(BaseHandler):
             raise PayloadKeyError(self.keys, geobody)
         else:
             try:
+                overscan = int(geobody['overscan'])
+            except:
+                logger.warn('Invalid JSON; overscan must be an integer: %s', geobody)
+                raise BadRequest('"overscan" must be an integer', request_body = geobody)
+
+            try:
                 zoom = int(geobody['zoom'])
             except:
                 logger.warn('Invalid JSON; zoom must be an integer: %s',
                             geobody)
                 raise BadRequest('"zoom" must be an integer.',
                                  request_body=geobody)
+
             path = 'http://{host}:{port}/style?style={css}'.format(
                 host=self.style_host,
                 port=self.style_port,
@@ -252,7 +265,8 @@ class RenderHandler(BaseHandler):
                             zoom,
                             len(tile),
                             len(xml))
-                self.write(render_png(tile, zoom, xml))
+
+                self.write(render_png(tile, zoom, xml, overscan))
                 self.finish()
 
             self.http_client.fetch(path, callback=handle_response)

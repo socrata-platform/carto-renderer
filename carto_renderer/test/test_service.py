@@ -198,10 +198,20 @@ def test_render_handler_bad_req():
     with raises(errors.BadRequest) as bad_zoom:
         render = RenderStrHandler()
         render.request.headers['content-type'] = 'application/octet-stream'
-        render.body = {"style": "", "zoom": "", "tile": ""}
+        render.body = {"style": "", "zoom": "", "tile": "", "overscan": 32}
         render.post()
+
+
+    with raises(errors.BadRequest) as bad_overscan:
+        render = RenderStrHandler()
+        render.request.headers['content-type'] = 'application/octet-stream'
+        render.body = {"style": "", "zoom": "", "tile": "", "overscan": ""}
+        render.post()
+
+
     assert "zoom" in bad_zoom.value.message.lower()
     assert "int" in bad_zoom.value.message.lower()
+    assert "overscan" in bad_overscan.value.message.lower()
 
 
 @given(text(alphabet=string.printable),
@@ -231,7 +241,7 @@ def test_render_handler(host, port):
     }
 
     tile = tile_encode(layer)
-    handler.body = {'zoom': 14, 'style': css, 'tile': tile}
+    handler.body = {'zoom': 14, 'style': css, 'tile': tile, 'overscan' : 0}
     handler.http_client = MockClient(css, xml)
     handler.style_host = str(host)
     handler.style_port = str(port)
@@ -260,7 +270,7 @@ def test_render_handler_no_xml(host, port):
     tile = tile_encode(layer)
 
     handler = RenderStrHandler()
-    handler.body = {'zoom': 14, 'style': css, 'tile': tile}
+    handler.body = {'zoom': 14, 'style': css, 'tile': tile, 'overscan': 32}
     handler.http_client = MockClient(css, None)
     handler.style_host = str(host)
     handler.style_port = str(port)
@@ -297,6 +307,6 @@ def test_render_png_ignores_bad_wkb():
     </Map>
     """
 
-    actual = service.render_png(tile, 1, xml)
+    actual = service.render_png(tile, 1, xml, 0)
 
     assert b64encode(actual) == expected
