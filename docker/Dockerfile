@@ -7,6 +7,8 @@ RUN DEBIAN_FRONTEND=noninteractive apt-get -y update && \
 
 RUN mkdir -p /app/carto_renderer
 
+ENV LOG_LEVEL INFO
+
 ADD frozen.txt /app/
 RUN pip install -r /app/frozen.txt
 

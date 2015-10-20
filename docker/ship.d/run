@@ -3,4 +3,5 @@ set -ev
 
 exec su socrata -c "PYTHONPATH=. python carto_renderer/service.py \
 --style_host=${STYLE_HOST} \
---style_port=${STYLE_PORT}"
+--style_port=${STYLE_PORT} \
+--log_level=${LOG_LEVEL}"
