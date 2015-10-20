@@ -5,7 +5,8 @@ Python script to duplicate the logic of sbt-release.
 import pytest
 import sys
 from os.path import abspath, dirname, join
-from sh import git              # pylint: disable=import-error
+# pylint: disable=import-error, no-name-in-module
+from sh import git
 
 
 def set_version(file_name, from_ver, to_ver):
