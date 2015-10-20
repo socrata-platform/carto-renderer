@@ -2,7 +2,7 @@
 A file just to hold the version number, allows automated version increasing.
 """
 
-SEMANTIC = '0.0.5-SNAPSHOT'
+SEMANTIC = '0.1.0-SNAPSHOT'
 BUILD_TIME = 'UNKNOWN'
 try:
     with open('build-time.txt') as f:
