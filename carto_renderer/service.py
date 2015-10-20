@@ -109,7 +109,7 @@ def render_png(tile, zoom, xml, overscan):
         map_tile.layers.append(map_layer)
 
     image = mapnik.Image(TILE_SIZE, TILE_SIZE)
-    #tile, image, scale, offset_x, offset_y
+    # tile, image, scale, offset_x, offset_y
     mapnik.render(map_tile, image, 1, overscan, overscan)
 
     return image.tostring('png')
@@ -202,7 +202,7 @@ class RenderHandler(BaseHandler):
     """
     Actually render the png.
 
-    Expects a JSON blob with 'style', 'zoom', and 'tile' values.
+    Expects a dictionary with 'style', 'zoom', and 'tile' values.
     """
     keys = ['tile', 'zoom', 'style']
 
@@ -230,8 +230,10 @@ class RenderHandler(BaseHandler):
             try:
                 overscan = int(geobody['overscan'])
             except:
-                logger.warn('Invalid JSON; overscan must be an integer: %s', geobody)
-                raise BadRequest('"overscan" must be an integer', request_body = geobody)
+                logger.warn('Invalid JSON; overscan must be an integer: %s',
+                            geobody)
+                raise BadRequest('"overscan" must be an integer',
+                                 request_body=geobody)
 
             try:
                 zoom = int(geobody['zoom'])
@@ -269,7 +271,9 @@ class RenderHandler(BaseHandler):
                 self.write(render_png(tile, zoom, xml, overscan))
                 self.finish()
 
-            self.http_client.fetch(path, callback=handle_response)
+            self.http_client.fetch(path,
+                                   callback=handle_response,
+                                   headers=LogWrapper.ENV)
 
 
 def init_logging():             # pragma: no cover
