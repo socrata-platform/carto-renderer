@@ -4,7 +4,7 @@ Service to render pngs from vector tiles using Carto CSS.
 """
 
 from tornado import web
-from tornado.httpclient import AsyncHTTPClient
+from tornado.httpclient import AsyncHTTPClient, HTTPRequest
 from tornado.ioloop import IOLoop
 from tornado.options import define, parse_command_line, options
 import mapnik                   # pylint: disable=import-error
@@ -271,9 +271,12 @@ class RenderHandler(BaseHandler):
                 self.write(render_png(tile, zoom, xml, overscan))
                 self.finish()
 
-            self.http_client.fetch(path,
-                                   callback=handle_response,
-                                   headers=LogWrapper.ENV)
+            headers = LogWrapper.ENV \
+                if LogWrapper.ENV['X-Socrata-RequestId'] is not None \
+                else {}
+
+            req = HTTPRequest(path, headers=headers)
+            self.http_client.fetch(req, callback=handle_response)
 
 
 def init_logging():             # pragma: no cover

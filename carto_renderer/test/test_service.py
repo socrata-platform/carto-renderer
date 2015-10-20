@@ -38,7 +38,8 @@ class MockClient(object):
         self.resp = MockClient.MockResp(xml)
         self.style = style
 
-    def fetch(self, path, callback):
+    def fetch(self, req, callback):
+        path = req.url
         assert path.endswith(quote_plus(self.style))
         callback(self.resp)
 
