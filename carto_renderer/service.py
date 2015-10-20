@@ -99,9 +99,13 @@ def render_png(tile, zoom, xml, overscan):
 
             try:
                 feat.add_geometries_from_wkb(feature)
-                wkt = None
             except RuntimeError:
-                logger.error('Invalid WKB: %s', wkt)
+                from mapnik import Path  # pylint: disable=no-name-in-module
+                try:
+                    wkt = Path.from_wkb(feature).to_wkt()
+                    logger.error('Invalid feature: %s', wkt)
+                except RuntimeError:
+                    logger.error('Corrupt feature: %s', feature.encode('hex'))
 
             source.add_feature(feat)
 
@@ -263,9 +267,9 @@ class RenderHandler(BaseHandler):
 
                 xml = response.body
 
-                logger.info('zoom: %d, len(tile): %d, len(xml): %d',
+                logger.info('zoom: %d, num features: %d, len(xml): %d',
                             zoom,
-                            len(tile),
+                            len([len(layer) for layer in tile.values()]),
                             len(xml))
 
                 self.write(render_png(tile, zoom, xml, overscan))
