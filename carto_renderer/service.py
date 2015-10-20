@@ -269,7 +269,7 @@ class RenderHandler(BaseHandler):
 
                 logger.info('zoom: %d, num features: %d, len(xml): %d',
                             zoom,
-                            len([len(layer) for layer in tile.values()]),
+                            sum([len(layer) for layer in tile.values()]),
                             len(xml))
 
                 self.write(render_png(tile, zoom, xml, overscan))
