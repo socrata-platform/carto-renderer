@@ -32,6 +32,16 @@ class LogWrapper(object):
     """
     ENV = {'X-Socrata-RequestId': None}
 
+    class Lazy(object):         # pylint: disable=too-few-public-methods
+        """
+        Lazy evaluation wrapper around a thunk.
+        """
+        def __init__(self, thunk):
+            self.thunk = thunk
+
+        def __str__(self):
+            return str(self.thunk())
+
     def __init__(self, underlying):
         self.underlying = underlying
 
@@ -271,7 +281,7 @@ class RenderHandler(BaseHandler):
                             zoom,
                             sum([len(layer) for layer in tile.values()]),
                             len(xml))
-                logger.debug('xml: %s', xml)
+                logger.debug('xml: %s', LogWrapper.Lazy(lambda: xml.replace('\n', ' ')))
 
                 self.write(render_png(tile, zoom, xml, overscan))
                 self.finish()
