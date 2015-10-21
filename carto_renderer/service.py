@@ -16,6 +16,7 @@ import base64
 import json
 
 from carto_renderer.errors import BadRequest, PayloadKeyError, ServiceError
+from carto_renderer.util import get_logger, init_logging, LogWrapper
 from carto_renderer.version import BUILD_TIME, SEMANTIC
 
 __package__ = 'carto_renderer'  # pylint: disable=redefined-builtin
@@ -24,56 +25,6 @@ __package__ = 'carto_renderer'  # pylint: disable=redefined-builtin
 BASE_ZOOM = 29
 TILE_ZOOM_FACTOR = 16
 TILE_SIZE = 256
-
-
-class LogWrapper(object):
-    """
-    A logging wrapper that includes log environment automatically.
-    """
-    ENV = {'X-Socrata-RequestId': None}
-
-    class Lazy(object):         # pylint: disable=too-few-public-methods
-        """
-        Lazy evaluation wrapper around a thunk.
-        """
-        def __init__(self, thunk):
-            self.thunk = thunk
-
-        def __str__(self):
-            return str(self.thunk())
-
-    def __init__(self, underlying):
-        self.underlying = underlying
-
-    def debug(self, *args):
-        """Log a debug statement."""
-        self.underlying.debug(*args, extra=LogWrapper.ENV)
-
-    def info(self, *args):
-        """Log an info statement."""
-        self.underlying.info(*args, extra=LogWrapper.ENV)
-
-    def warn(self, *args):
-        """Log a warning."""
-        self.underlying.warn(*args, extra=LogWrapper.ENV)
-
-    def error(self, *args):
-        """Log an error."""
-        self.underlying.error(*args, extra=LogWrapper.ENV)
-
-    def exception(self, *args):
-        """Log an exception."""
-        self.underlying.exception(*args, extra=LogWrapper.ENV)
-
-
-def get_logger(obj=None):
-    """
-    Return a (wrapped) logger with appropriate name.
-    """
-    import logging
-
-    tail = '.' + obj.__class__.__name__ if obj else ''
-    return LogWrapper(logging.getLogger(__package__ + tail))
 
 
 def render_png(tile, zoom, xml, overscan):
@@ -138,7 +89,7 @@ class BaseHandler(web.RequestHandler):
         """
         Extract the body from self.request as a dictionary.
         """
-        logger = get_logger()
+        logger = get_logger(self)
 
         request_id = self.request.headers.get('x-socrata-requestid', '')
         LogWrapper.ENV['X-Socrata-RequestId'] = request_id
@@ -163,7 +114,7 @@ class BaseHandler(web.RequestHandler):
         """
         Convert ServiceErrors to HTTP errors.
         """
-        logger = get_logger()
+        logger = get_logger(self)
 
         payload = {}
         logger.exception(err)
@@ -204,7 +155,7 @@ class VersionHandler(BaseHandler):
         request_id = self.request.headers.get('x-socrata-requestid', '')
         LogWrapper.ENV['X-Socrata-RequestId'] = request_id
 
-        logger = get_logger()
+        logger = get_logger(self)
 
         logger.info('Alive!')
         self.write(VersionHandler.version)
@@ -233,7 +184,7 @@ class RenderHandler(BaseHandler):
 
         Expects a JSON blob with 'style', 'zoom', and 'tile' values.
         """
-        logger = get_logger()
+        logger = get_logger(self)
 
         geobody = self.extract_body()
 
@@ -281,7 +232,8 @@ class RenderHandler(BaseHandler):
                             zoom,
                             sum([len(layer) for layer in tile.values()]),
                             len(xml))
-                logger.debug('xml: %s', LogWrapper.Lazy(lambda: xml.replace('\n', ' ')))
+                logger.debug('xml: %s',
+                             LogWrapper.Lazy(lambda: xml.replace('\n', ' ')))
 
                 self.write(render_png(tile, zoom, xml, overscan))
                 self.finish()
@@ -292,37 +244,6 @@ class RenderHandler(BaseHandler):
 
             req = HTTPRequest(path, headers=headers)
             self.http_client.fetch(req, callback=handle_response)
-
-
-def init_logging():             # pragma: no cover
-    """
-    Initialize logging from config.
-    """
-    import logging
-    import sys
-
-    root_formatter = logging.Formatter(
-        '%(asctime)s %(levelname)s [%(thread)d] ' +
-        '%(name)s.%(funcName)s %(message)s')
-
-    root_handler = logging.StreamHandler(sys.stdout)
-    root_handler.setLevel(options.log_level)
-    root_handler.setFormatter(root_formatter)
-
-    root = logging.getLogger()
-    root.setLevel(options.log_level)
-    root.addHandler(root_handler)
-
-    carto_formatter = logging.Formatter(options.log_format)
-
-    carto_handler = logging.StreamHandler(sys.stdout)
-    carto_handler.setLevel(options.log_level)
-    carto_handler.setFormatter(carto_formatter)
-
-    carto = get_logger().underlying
-    carto.setLevel(options.log_level)
-    carto.propagate = 0
-    carto.addHandler(carto_handler)
 
 
 def main():  # pragma: no cover
@@ -336,7 +257,7 @@ def main():  # pragma: no cover
     define('style_port', default=4097)
     define('log_level', default='INFO')
     define('log_format', default='%(asctime)s %(levelname)s [%(thread)d] ' +
-           '[%(X-Socrata-RequestId)s] %(name)s.%(funcName)s %(message)s')
+           '[%(X-Socrata-RequestId)s] %(name)s %(message)s')
     parse_command_line()
     init_logging()
 
