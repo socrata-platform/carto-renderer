@@ -2,6 +2,8 @@
 Error classes for this service.
 """
 
+from carto_renderer.util import get_logger
+
 
 class ServiceError(Exception):
     """
@@ -11,6 +13,12 @@ class ServiceError(Exception):
         super(ServiceError, self).__init__(message)
         self.status_code = status_code
         self.request_body = request_body
+        logger = get_logger(self)
+        if request_body:
+            logger.error('Fatal Error (%d): "%s"; body: "%s"',
+                         status_code, message, request_body)
+        else:
+            logger.error('Fatal Error (%d): "%s"', status_code, message)
 
 
 class BadRequest(ServiceError):
