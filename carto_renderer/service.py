@@ -59,7 +59,9 @@ def render_png(tile, zoom, xml, overscan):
             feat = mapnik.Feature(ctx, 0)
 
             try:
-                feat.add_geometries_from_wkb(feature)
+                feat.add_geometries_from_wkb(feature['wkbs'])
+                for k, v in feature['attributes'].iteritems():
+                    feat[k.encode('ascii', 'ignore')] = v
             except RuntimeError:
                 from mapnik import Path  # pylint: disable=no-name-in-module
                 try:
@@ -208,13 +210,19 @@ class RenderHandler(BaseHandler):
                 raise BadRequest('"zoom" must be an integer.',
                                  request_body=geobody)
 
-            path = 'http://{host}:{port}/style?style={css}'.format(
-                host=self.style_host,
-                port=self.style_port,
-                css=quote_plus(geobody['style']))
 
-            tile = {layer: [base64.b64decode(wkb) for wkb in wkbs]
-                    for layer, wkbs in geobody['tile'].items()}
+            path = 'http://{host}:{port}/style'.format(
+                host=self.style_host,
+                port=self.style_port)
+
+            tile = {
+                layer: [
+                    {
+                        'wkbs': base64.b64decode(feature['wkbs']),
+                        'attributes': json.loads(base64.b64decode(feature['attributes']))
+                    } for feature in features
+                ] for layer, features in geobody['tile'].items()
+            }
 
             def handle_response(response):
                 """
@@ -242,7 +250,9 @@ class RenderHandler(BaseHandler):
                 if LogWrapper.ENV['X-Socrata-RequestId'] is not None \
                 else {}
 
-            req = HTTPRequest(path, headers=headers)
+            headers['Content-Type']='application/x-www-form-urlencoded'
+            body = 'style=' + quote_plus(geobody['style'])
+            req = HTTPRequest(path, 'POST', headers, body=body)
             self.http_client.fetch(req, callback=handle_response)
 
 
