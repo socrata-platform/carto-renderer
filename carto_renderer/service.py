@@ -215,14 +215,14 @@ class RenderHandler(BaseHandler):
                 host=self.style_host,
                 port=self.style_port)
 
-            tile = {
-                layer: [
-                    {
-                        'wkbs': base64.b64decode(feature['wkbs']),
-                        'attributes': json.loads(base64.b64decode(feature['attributes']))
-                    } for feature in features
-                ] for layer, features in geobody['tile'].items()
-            }
+            def buildFeature(feature):
+                return {
+                    'wkbs': base64.b64decode(feature['wkbs']),
+                    'attributes': json.loads(base64.b64decode(feature['attributes']))
+                }
+
+            tile = {layer: [buildFeature(feature) for feature in features]
+                    for layer, features in geobody['tile'].items()}
 
             def handle_response(response):
                 """
