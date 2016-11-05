@@ -15,12 +15,18 @@ from carto_renderer import service, errors
 
 
 def tile_encode(layer):
-    return {k: [b64encode(f) for f in feats] for k, feats in layer.items()}
+    def buildFeature(feature):
+        return {
+            'wkbs': b64encode(feature['wkbs']),
+            'attributes': b64encode(json.dumps(feature['attributes']))
+        }
+
+    return {k: [buildFeature(f) for f in feats] for k, feats in layer.items()}
 
 
-def to_wkb(*wkts):
+def to_wkb(wkt):
     from mapnik import Path, wkbByteOrder  # pylint: disable=no-name-in-module
-    return [Path.from_wkt(wkt).to_wkb(wkbByteOrder.XDR) for wkt in wkts]
+    return Path.from_wkt(wkt).to_wkb(wkbByteOrder.XDR)
 
 
 def render_pair(pair):
@@ -39,8 +45,7 @@ class MockClient(object):
         self.style = style
 
     def fetch(self, req, callback):
-        path = req.url
-        assert path.endswith(quote_plus(self.style))
+        assert req.body.decode('utf-8').find(quote_plus(self.style)) > -1
         callback(self.resp)
 
 
@@ -238,10 +243,11 @@ def test_render_handler(host, port):
 
     css = '#main{marker-line-color:#00C;marker-width:1}'
     layer = {
-        "main": to_wkb("POINT(50 50)")
+        "main": [{ "wkbs": to_wkb("POINT(50 50)"), "attributes": {} }]
     }
 
     tile = tile_encode(layer)
+    print tile
     handler.body = {'zoom': 14, 'style': css, 'tile': tile, 'overscan' : 0}
     handler.http_client = MockClient(css, xml)
     handler.style_host = str(host)
@@ -265,7 +271,7 @@ def test_render_handler(host, port):
 def test_render_handler_no_xml(host, port):
     css = '#main{marker-line-color:#00C;marker-width:1}'
     layer = {
-        "main": to_wkb("POINT(50 50)")
+        "main": [{ "wkbs": to_wkb("POINT(50 50)"), "attributes": {} }]
     }
 
     tile = tile_encode(layer)
@@ -284,14 +290,17 @@ def test_render_handler_no_xml(host, port):
 
 def test_render_png_ignores_bad_wkb():
     if platform.system() == 'Darwin':  # pragma: no cover
-        expected = """iVBORw0KGgoAAAANSUhEUgAAAQAAAAEACAYAAABccqhmAAABPklEQVR4nO3WsQmAMBRF0Q+6Q6ps61xOEFLoQDHgCEF/cw68/pYvAgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABYMPaIu2ZXACnaeHeV7BLgd/2YO+cT2LJLAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAPjIAwKMClP4YvSFAAAAAElFTkSuQmCC"""  # noqa
+        expected = """iVBORw0KGgoAAAANSUhEUgAAAQAAAAEACAYAAABccqhmAAABFUlEQVR4nO3BMQEAAADCoPVP7WsIoAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAeAMBPAABPO1TCQAAAABJRU5ErkJggg=="""  # noqa
     elif platform.system() == 'Linux':  # pragma: no cover
-        expected = """iVBORw0KGgoAAAANSUhEUgAAAQAAAAEACAYAAABccqhmAAABPklEQVR4nO3WsQmAMBRF0Q+6Q6ps61xOEFLoQDHgCEF/cw68/pYvAgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABYMPaIu2ZXACnaeHeV7BLgd/2YO+cT2LJLAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAPjIAwKMClP4YvSFAAAAAElFTkSuQmCC"""  # noqa
+        expected = """iVBORw0KGgoAAAANSUhEUgAAAQAAAAEACAYAAABccqhmAAABFUlEQVR4nO3BMQEAAADCoPVP7WsIoAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAeAMBPAABPO1TCQAAAABJRU5ErkJggg=="""  # noqa
     else:                       # pragma: no cover
         raise NotImplementedError("Unknown platform!")
 
     tile = {
-        "main": to_wkb("POINT(50 50)") + ['INVALID']
+        "main": [{
+            "wkbs": 'INVALID',
+            "attributes": {}
+        }]
     }
 
     xml = """<?xml version="1.0" encoding="utf-8"?>
