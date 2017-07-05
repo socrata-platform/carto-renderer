@@ -9,7 +9,8 @@ Install Mapnik (OSX):
 ```
 brew tap homebrew/versions
 brew update
-brew install mapnik2
+brew install mapnik@2
+brew link mapnik@2 --force
 ```
 
 Install Mapnik (Debian/Ubuntu):
