@@ -213,8 +213,16 @@ class RenderHandler(BaseHandler):
                 port=self.style_port,
                 css=quote_plus(geobody['style']))
 
-            tile = {layer: [base64.b64decode(wkb) for wkb in wkbs]
-                    for layer, wkbs in geobody['tile'].items()}
+            tile = geobody['tile']
+
+            # Hack for compat with Base64 and MsgPack.  Should be
+            # ripped out after TileServer goes out.
+            first_byte = ord(geobody['tile'].items()[0][1][0][0])
+
+            if first_byte not in [0, 1]:
+                tile = {layer: [base64.b64decode(wkb) for wkb in wkbs]
+                        for layer, wkbs in geobody['tile'].items()}
+            # End Base64 backwards compatibility hack.
 
             def handle_response(response):
                 """
