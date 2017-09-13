@@ -1,26 +1,25 @@
 # pylint: disable=missing-docstring,line-too-long,import-error,abstract-method
-import json
-import mock
 import platform
 import string
-
+from urllib import quote_plus
 from base64 import b64encode
+
+import json
+import mock
 from hypothesis import given
 from hypothesis.strategies import integers, text
 from pytest import raises
 from tornado.web import RequestHandler
-from urllib import quote_plus
 
 from carto_renderer import service, errors
-
 
 def tile_encode(layer):
     return {k: [b64encode(f) for f in feats] for k, feats in layer.items()}
 
 
 def to_wkb(*wkts):
-    from mapnik import Path, wkbByteOrder  # pylint: disable=no-name-in-module
-    return [Path.from_wkt(wkt).to_wkb(wkbByteOrder.XDR) for wkt in wkts]
+    from mapnik import Geometry, wkbByteOrder  # pylint: disable=no-name-in-module
+    return [Geometry.from_wkt(wkt).to_wkb(wkbByteOrder.XDR) for wkt in wkts]
 
 
 def render_pair(pair):
