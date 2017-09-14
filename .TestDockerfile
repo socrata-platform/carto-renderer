@@ -1,0 +1,16 @@
+FROM socrata/base-xenial
+
+WORKDIR /app
+
+RUN DEBIAN_FRONTEND=noninteractive apt-get -y update && \
+    DEBIAN_FRONTEND=noninteractive apt-get -y install python-mapnik python-pip
+
+RUN mkdir -p /app/carto_renderer
+
+ENV LOG_LEVEL INFO
+
+ADD dev-requirements.txt /app/
+RUN pip install -r /app/dev-requirements.txt
+ADD carto_renderer /app/carto_renderer
+
+RUN PYTHONPATH=/app py.test -v /app/carto_renderer
