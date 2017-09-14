@@ -21,5 +21,5 @@ if [ '--dev' = "$1" ]; then
      PYTHONPATH=. py.test -v carto_renderer
 else
     find . -name '*.pyc' -delete    
-    docker build -f .TestDockerfile .
+    docker build -f .TestDockerfile --rm -t carto-renderer-test-container .
 fi

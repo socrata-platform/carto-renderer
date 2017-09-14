@@ -14,4 +14,4 @@ ADD dev-requirements.txt /app/
 RUN pip install -r /app/dev-requirements.txt
 ADD carto_renderer /app/carto_renderer
 
-RUN PYTHONPATH=/app py.test -v /app/carto_renderer
+RUN PYTHONPATH=/app py.test -vv /app/carto_renderer
