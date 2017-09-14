@@ -18,7 +18,7 @@ fi
 source "${VENV_DIR}"/bin/activate
 
 if [ ! -d "${VENV_DIR}"/lib/python2.7/site-packages/mapnik ]; then
-    ln -s "$MAPNIK_DIR" "${VENV_DIR}"/lib/python2.7/site-packages/
+    ln -s "$MAPNIK_DIR" "${VENV_DIR}"/lib/python2.7/site-packages/mapnik
 fi
 
 DEV_FILE='dev-requirements.txt'
