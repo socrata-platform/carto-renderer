@@ -2,20 +2,22 @@
 This is a service that's a proof of concept for getting a service that
 renders vector tiles into images using CartoCSS.
 
-You can exercise it with the following curl commands.
+## Start the Service (Uses Docker) ##
+```
+bin/start-renderer.sh
+```
 
-## Installation ##
+## Start the Service (without Docker) ##
+This requires Mapnik3.0
+
 Install Mapnik (OSX):
 ```
-brew tap homebrew/versions
-brew update
-brew install mapnik@2
-brew link mapnik@2 --force
+brew install mapnik
 ```
 
 Install Mapnik (Debian/Ubuntu):
 ```
-sudo apt-get install python-mapnik2
+sudo apt-get install python-mapnik
 ```
 
 Install Python Dependencies:
@@ -25,7 +27,7 @@ pip install -r dev-requirements.txt
 
 ## Start the Service ##
 ```
-PYTHONPATH=. carto_renderer/service.py
+bin/start-renderer.sh --dev
 ```
 
 ## Examples ##
@@ -37,12 +39,11 @@ curl -o test.png localhost:4096/render -H 'Content-type: application/json' -d @c
 ## Testing ##
 The tests are run using py.test and hypothesis
 
-You can install them by running:
 ```
-pip install -r dev-requirements
+bin/test.sh
 ```
 
-Run tests from the root directory:
+## Build Docker Image ##
 ```
-PYTHONPATH=. py.test
+bin/dockerize.sh
 ```
