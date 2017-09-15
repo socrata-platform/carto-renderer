@@ -5,8 +5,6 @@ set -ev
 # Change to the project root.
 cd "$(git rev-parse --show-toplevel 2>/dev/null)"
 
-MAPNIK_DIR=$(dirname "$(python -c 'import mapnik; print(mapnik.__file__)')")
-
 VENV_DIR="venv"
 if [ "${HUDSON_HOME}" ]; then
     VENV_DIR="${HUDSON_HOME}/carto-renderer/${VENV_DIR}"
@@ -16,10 +14,6 @@ if [ ! -d "${VENV_DIR}" ]; then
     virtualenv "${VENV_DIR}"
 fi
 source "${VENV_DIR}"/bin/activate
-
-if [ ! -d "${VENV_DIR}"/lib/python2.7/site-packages/mapnik ]; then
-    ln -s "$MAPNIK_DIR" "${VENV_DIR}"/lib/python2.7/site-packages/mapnik
-fi
 
 DEV_FILE='dev-requirements.txt'
 FROZEN_FILE='frozen.txt'
