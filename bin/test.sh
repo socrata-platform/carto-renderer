@@ -1,7 +1,9 @@
 #!/bin/bash
 
+set -ev
+
 # Change to the project root.
-cd "$(git rev-parse --show-toplevel 2>/dev/null)" || exit 1
+cd "$(git rev-parse --show-toplevel 2>/dev/null)"
 
 if [ '--dev' = "$1" ]; then
     MAPNIK_DIR=$(dirname "$(python -c 'import mapnik; print(mapnik.__file__)')")
@@ -15,11 +17,9 @@ if [ '--dev' = "$1" ]; then
         ln -s "$MAPNIK_DIR" venv/lib/python2.7/site-packages/
     fi
 
-    pip install --upgrade --requirement dev-requirements.txt
-    PYTHONPATH=. carto_renderer/service.py
+     pip install --upgrade --requirement dev-requirements.txt
+     PYTHONPATH=. py.test -v carto_renderer
 else
-    bin/dockerize.sh
-    rm frozen.txt
-    docker run -p 4096:4096 -e STYLE_HOST=localhost -e STYLE_PORT=4097 -e LOG_LEVEL=INFO carto-renderer
+    find . -name '*.pyc' -delete    
+    docker build -f .TestDockerfile --rm -t carto-renderer-test-container .
 fi
-

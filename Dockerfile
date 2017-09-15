@@ -1,9 +1,10 @@
-FROM socrata/python
+FROM socrata/base-xenial
 
 WORKDIR /app
 
 RUN DEBIAN_FRONTEND=noninteractive apt-get -y update && \
-    DEBIAN_FRONTEND=noninteractive apt-get -y install python-mapnik2
+    DEBIAN_FRONTEND=noninteractive apt-get -y install python-mapnik python-pip
+RUN pip install --upgrade pip 
 
 RUN mkdir -p /app/carto_renderer
 

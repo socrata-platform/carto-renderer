@@ -3,17 +3,16 @@
 Service to render pngs from vector tiles using Carto CSS.
 """
 
+import base64
+import json
+from urllib import quote_plus
+
 from tornado import web
 from tornado.httpclient import AsyncHTTPClient, HTTPRequest
 from tornado.ioloop import IOLoop
 from tornado.options import define, parse_command_line, options
 import mapnik                   # pylint: disable=import-error
 import msgpack
-
-from urllib import quote_plus
-
-import base64
-import json
 
 from carto_renderer.errors import BadRequest, PayloadKeyError, ServiceError
 from carto_renderer.util import get_logger, init_logging, LogWrapper
@@ -26,15 +25,17 @@ BASE_ZOOM = 29
 TILE_ZOOM_FACTOR = 16
 TILE_SIZE = 256
 
+def render_png(tile, _zoom, xml, overscan):
+    """
+    Render the tile as a .png
 
-def render_png(tile, zoom, xml, overscan):
-    map_tile_size = TILE_SIZE + (overscan * 2)
+    TODO: Actually handling zoom levels.
+    """
     # mapnik is installed in a non-standard way.
     # It confuses pylint.
-    # pylint: disable=no-member
-    """
-    Render the tile for the given zoom
-    """
+    # pylint: disable=no-member,too-many-locals
+
+    map_tile_size = TILE_SIZE + (overscan * 2)
     logger = get_logger()
     ctx = mapnik.Context()
 
@@ -59,11 +60,10 @@ def render_png(tile, zoom, xml, overscan):
             feat = mapnik.Feature(ctx, 0)
 
             try:
-                feat.add_geometries_from_wkb(feature)
+                feat.geometry = mapnik.Geometry.from_wkb(feature)
             except RuntimeError:
-                from mapnik import Path  # pylint: disable=no-name-in-module
                 try:
-                    wkt = Path.from_wkb(feature).to_wkt()
+                    wkt = mapnik.Geometry.from_wkb(feature).to_wkt()
                     logger.error('Invalid feature: %s', wkt)
                 except RuntimeError:
                     logger.error('Corrupt feature: %s', feature.encode('hex'))
@@ -222,7 +222,7 @@ class RenderHandler(BaseHandler):
 
                 if first_byte not in [0, 1]:
                     tile = {layer: [base64.b64decode(wkb) for wkb in wkbs]
-                        for layer, wkbs in geobody['tile'].items()}
+                            for layer, wkbs in geobody['tile'].items()}
             except IndexError:
                 pass
             # End Base64 backwards compatibility hack.
