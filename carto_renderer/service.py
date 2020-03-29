@@ -6,7 +6,7 @@ Service to render pngs from vector tiles using Carto CSS.
 import json
 from urllib.parse import quote_plus
 
-from tornado import web
+from tornado import web, escape
 from tornado.httpclient import AsyncHTTPClient, HTTPRequest
 from tornado.ioloop import IOLoop
 from tornado.options import define, parse_command_line, options
@@ -103,10 +103,10 @@ class BaseHandler(web.RequestHandler):
         body = self.request.body
 
         try:
-            extracted = msgpack.loads(body)
+            extracted = msgpack.loads(body, raw=True)
         except Exception:
             logger.warn('Invalid message')
-            raise BadRequest('Could not parse message.', body)
+            raise BadRequest('Could not parse message.', escape.to_unicode(body))
         return extracted
 
     def _handle_request_exception(self, err):
@@ -177,7 +177,7 @@ class RenderHandler(BaseHandler):
         self.style_host = style_host    # pragma: no cover
         self.style_port = style_port    # pragma: no cover
 
-    @web.asynchronous
+#    @web.asynchronous
     def post(self):
         """
         Actually render the png.
