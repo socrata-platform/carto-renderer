@@ -1,6 +1,6 @@
 # pylint: disable=missing-docstring,line-too-long,import-error,abstract-method
 import string
-from urllib import quote_plus
+from urllib.parse import quote_plus
 from base64 import b64encode
 
 import json
@@ -13,7 +13,7 @@ from tornado.web import RequestHandler
 from carto_renderer import service, errors
 
 def tile_encode(layer):
-    return {k: [b64encode(f) for f in feats] for k, feats in layer.items()}
+    return {k: [b64encode(f) for f in feats] for k, feats in list(layer.items())}
 
 
 def to_wkb(*wkts):
@@ -76,10 +76,10 @@ class StringHandler(RequestHandler):
         self.status_reason = reason
 
     def was_written(self):
-        return u''.join([unicode(s) for s in self.written])
+        return ''.join([str(s) for s in self.written])
 
     def was_written_b64(self):
-        return u''.join([b64encode(s) for s in self.written])
+        return ''.join([b64encode(s) for s in self.written])
 
 
 class BaseStrHandler(service.BaseHandler, StringHandler):

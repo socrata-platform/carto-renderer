@@ -4,7 +4,7 @@ Service to render pngs from vector tiles using Carto CSS.
 """
 
 import json
-from urllib import quote_plus
+from urllib.parse import quote_plus
 
 from tornado import web
 from tornado.httpclient import AsyncHTTPClient, HTTPRequest
@@ -49,7 +49,7 @@ def render_png(tile, _zoom, xml, overscan):
     box_max = TILE_SIZE + overscan - 1
     map_tile.zoom_to_box(mapnik.Box2d(box_min, box_min, box_max, box_max))
 
-    for (name, features) in tile.items():
+    for (name, features) in list(tile.items()):
         name = name.encode('ascii', 'ignore')
         source = mapnik.MemoryDatasource()
         map_layer = mapnik.Layer(name)
@@ -228,7 +228,7 @@ class RenderHandler(BaseHandler):
 
                 logger.info('zoom: %d, num features: %d, len(xml): %d',
                             zoom,
-                            sum([len(layer) for layer in tile.values()]),
+                            sum([len(layer) for layer in list(tile.values())]),
                             len(xml))
                 logger.debug('xml: %s',
                              LogWrapper.Lazy(lambda: xml.replace('\n', ' ')))
