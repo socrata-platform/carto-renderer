@@ -119,13 +119,14 @@ class BaseHandler(web.RequestHandler):
         logger.exception(err)
         if isinstance(err, ServiceError):
             status_code = err.status_code
+            payload['message'] = err.message
             if err.request_body:
                 payload['request_body'] = err.request_body
         else:
+            payload['message'] = str(err)
             status_code = 500
 
         payload['resultCode'] = status_code
-        payload['message'] = err.message
 
         self.clear()
         self.set_status(status_code)
