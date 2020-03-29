@@ -1,7 +1,8 @@
-msgpack-python
+msgpack
 tornado
 
-hypothesis # test
-mock       # test
-pytest     # test
-sh         # test
+hypothesis     # test
+mock           # test
+pytest         # test
+sh             # test
+pytest-asyncio # test
