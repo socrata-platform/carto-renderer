@@ -24,7 +24,7 @@ else
     if [ 'Darwin' = "$(uname)" ]; then
         OPTS=(-p 4096:4096 -e 'STYLE_HOST=docker.for.mac.localhost')
     else
-        OPTS=('--net=host')
+        OPTS=('--net=host' -e 'STYLE_HOST=localhost')
     fi
 
     docker run "${OPTS[@]}" -e STYLE_PORT=4097 -e LOG_LEVEL=INFO carto-renderer

@@ -50,7 +50,6 @@ def render_png(tile, _zoom, xml, overscan):
     map_tile.zoom_to_box(mapnik.Box2d(box_min, box_min, box_max, box_max))
 
     for (name, features) in list(tile.items()):
-        name = name.encode('ascii', 'ignore')
         source = mapnik.MemoryDatasource()
         map_layer = mapnik.Layer(name)
         map_layer.datasource = source
@@ -169,7 +168,7 @@ class RenderHandler(BaseHandler):
 
     Expects a dictionary with 'style', 'zoom', and 'tile' values.
     """
-    keys = ['tile', 'zoom', 'style']
+    keys = [b'tile', b'zoom', b'style']
 
     def initialize(self, http_client, style_host, style_port):
         """Magic Tornado __init__ replacement."""
@@ -178,7 +177,7 @@ class RenderHandler(BaseHandler):
         self.style_port = style_port    # pragma: no cover
 
 #    @web.asynchronous
-    def post(self):
+    async def post(self):
         """
         Actually render the png.
 
@@ -193,7 +192,7 @@ class RenderHandler(BaseHandler):
             raise PayloadKeyError(self.keys, geobody)
         else:
             try:
-                overscan = int(geobody['overscan'])
+                overscan = int(geobody[b'overscan'])
             except:
                 logger.warn('Invalid JSON; overscan must be an integer: %s',
                             geobody)
@@ -201,7 +200,7 @@ class RenderHandler(BaseHandler):
                                  request_body=geobody)
 
             try:
-                zoom = int(geobody['zoom'])
+                zoom = int(geobody[b'zoom'])
             except:
                 logger.warn('Invalid JSON; zoom must be an integer: %s',
                             geobody)
@@ -211,9 +210,9 @@ class RenderHandler(BaseHandler):
             path = 'http://{host}:{port}/style?style={css}'.format(
                 host=self.style_host,
                 port=self.style_port,
-                css=quote_plus(geobody['style']))
+                css=quote_plus(geobody[b'style']))
 
-            tile = geobody['tile']
+            tile = geobody[b'tile']
 
             def handle_response(response):
                 """
@@ -242,7 +241,8 @@ class RenderHandler(BaseHandler):
                 else {}
 
             req = HTTPRequest(path, headers=headers)
-            self.http_client.fetch(req, callback=handle_response)
+            resp = await self.http_client.fetch(req)
+            handle_response(resp)
 
 
 def main():  # pragma: no cover
