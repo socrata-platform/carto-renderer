@@ -17,7 +17,7 @@ brew install mapnik
 
 Install Mapnik (Debian/Ubuntu):
 ```
-sudo apt-get install python-mapnik
+sudo apt-get install python3-mapnik
 ```
 
 Install Python Dependencies:
@@ -28,12 +28,6 @@ pip install -r dev-requirements.txt
 ## Start the Service ##
 ```
 bin/start-renderer.sh --dev
-```
-
-## Examples ##
-Render an image to `test.png`:
-```
-curl -o test.png localhost:4096/render -H 'Content-type: application/json' -d @carto_renderer/examples/main.json
 ```
 
 ## Testing ##
