@@ -41,6 +41,6 @@ class PayloadKeyError(ServiceError):
         message = ''
 
         beg = keys[:-1]
-        message = PayloadKeyError.msg.format("', '".join(beg), keys[-1])
+        message = PayloadKeyError.msg.format(b"', '".join(beg), keys[-1])
 
         super(PayloadKeyError, self).__init__(message, 400, request_body=blob)

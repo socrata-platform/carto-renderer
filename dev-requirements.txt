@@ -1,5 +1,6 @@
 msgpack
 tornado
+asyncio
 
 hypothesis     # test
 mock           # test
