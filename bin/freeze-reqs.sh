@@ -3,17 +3,7 @@
 set -ev
 
 # Change to the project root.
-cd "$(git rev-parse --show-toplevel 2>/dev/null)"
-
-VENV_DIR="venv"
-if [ "${HUDSON_HOME}" ]; then
-    VENV_DIR="${HUDSON_HOME}/carto-renderer/${VENV_DIR}"
-fi
-
-if [ ! -d "${VENV_DIR}" ]; then
-    virtualenv "${VENV_DIR}"
-fi
-source "${VENV_DIR}"/bin/activate
+cd /app
 
 DEV_FILE='dev-requirements.txt'
 FROZEN_FILE='frozen.txt'

@@ -19,8 +19,7 @@ if [ '--dev' = "$1" ]; then
     PYTHONPATH=. carto_renderer/service.py
 else
     bin/dockerize.sh
-    rm frozen.txt
-    
+
     if [ 'Darwin' = "$(uname)" ]; then
         OPTS=(-p 4096:4096 -e 'STYLE_HOST=docker.for.mac.localhost')
     else

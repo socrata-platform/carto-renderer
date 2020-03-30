@@ -9,7 +9,10 @@ RUN mkdir -p /app/carto_renderer
 
 ENV LOG_LEVEL INFO
 
-ADD frozen.txt /app/
+COPY bin/freeze-reqs.sh /app/
+COPY dev-requirements.txt /app/
+RUN chmod +x /app/freeze-reqs.sh
+RUN /app/freeze-reqs.sh
 RUN pip install -r /app/frozen.txt
 
 COPY ship.d /etc/ship.d/
