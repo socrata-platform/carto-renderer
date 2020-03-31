@@ -1,10 +1,12 @@
 # pylint: disable=missing-docstring,line-too-long,import-error,abstract-method
 import string
-from urllib import quote_plus
+from urllib.parse import quote_plus
 from base64 import b64encode
 
 import json
 import mock
+import asyncio
+import pytest
 from hypothesis import given
 from hypothesis.strategies import integers, text
 from pytest import raises
@@ -13,7 +15,7 @@ from tornado.web import RequestHandler
 from carto_renderer import service, errors
 
 def tile_encode(layer):
-    return {k: [b64encode(f) for f in feats] for k, feats in layer.items()}
+    return {k: [b64encode(f) for f in feats] for k, feats in list(layer.items())}
 
 
 def to_wkb(*wkts):
@@ -36,10 +38,10 @@ class MockClient(object):
         self.resp = MockClient.MockResp(xml)
         self.style = style
 
-    def fetch(self, req, callback):
+    async def fetch(self, req):
         path = req.url
         assert path.endswith(quote_plus(self.style))
-        callback(self.resp)
+        return self.resp
 
 
 class StringHandler(RequestHandler):
@@ -76,10 +78,10 @@ class StringHandler(RequestHandler):
         self.status_reason = reason
 
     def was_written(self):
-        return u''.join([unicode(s) for s in self.written])
+        return ''.join([str(s) for s in self.written])
 
     def was_written_b64(self):
-        return u''.join([b64encode(s) for s in self.written])
+        return b''.join([b64encode(s) for s in self.written])
 
 
 class BaseStrHandler(service.BaseHandler, StringHandler):
@@ -158,55 +160,54 @@ def test_base_handler_bad_req():
         base.extract_body()
     assert "could not parse" in bad_json.value.message.lower()
 
-
-def test_render_handler_bad_req():
+@pytest.mark.asyncio
+async def test_render_handler_bad_req():
     keys = ["tile", "zoom", "style"]
 
     with raises(errors.PayloadKeyError) as empty_tile:
         render = RenderStrHandler()
         render.request.headers['content-type'] = 'application/octet-stream'
         render.body = {}
-        render.post()
+        await render.post()
     for k in keys:
         assert k in empty_tile.value.message.lower()
 
     with raises(errors.PayloadKeyError) as no_style:
         render = RenderStrHandler()
         render.request.headers['content-type'] = 'application/octet-stream'
-        render.body = {"zoom": "", "body": ""}
-        render.post()
+        render.body = {b'zoom': '', b'body': ''}
+        await render.post()
     for k in keys:
         assert k in no_style.value.message.lower()
 
     with raises(errors.PayloadKeyError) as no_zoom:
         render = RenderStrHandler()
         render.request.headers['content-type'] = 'application/octet-stream'
-        render.body = {"style": "", "tile": ""}
-        render.post()
+        render.body = {b'style': '', b'tile': ''}
+        await render.post()
     for k in keys:
         assert k in no_zoom.value.message.lower()
 
     with raises(errors.PayloadKeyError) as no_tile:
         render = RenderStrHandler()
         render.request.headers['content-type'] = 'application/octet-stream'
-        render.body = {"style": "", "zoom": ""}
-        render.post()
+        render.body = {b'style': '', b'zoom': ''}
+        await render.post()
     for k in keys:
         assert k in no_tile.value.message.lower()
 
     with raises(errors.BadRequest) as bad_zoom:
         render = RenderStrHandler()
         render.request.headers['content-type'] = 'application/octet-stream'
-        render.body = {"style": "", "zoom": "", "tile": "", "overscan": 32}
-        render.post()
+        render.body = {b'style': '', b'zoom': '', b'tile': '', b'overscan': 32}
+        await render.post()
 
 
     with raises(errors.BadRequest) as bad_overscan:
         render = RenderStrHandler()
         render.request.headers['content-type'] = 'application/octet-stream'
-        render.body = {"style": "", "zoom": "", "tile": "", "overscan": ""}
-        render.post()
-
+        render.body = {b"style": "", b"zoom": "", b"tile": "", b"overscan": ""}
+        await render.post()
 
     assert "zoom" in bad_zoom.value.message.lower()
     assert "int" in bad_zoom.value.message.lower()
@@ -215,7 +216,8 @@ def test_render_handler_bad_req():
 
 @given(text(alphabet=string.printable),
        text(alphabet=string.printable))
-def test_render_handler(host, port):
+@pytest.mark.asyncio
+async def test_render_handler(host, port):
     """
     This is a simple regression test, it only hits one case.
     """
@@ -240,14 +242,14 @@ def test_render_handler(host, port):
     }
 
     tile = tile_encode(layer)
-    handler.body = {'zoom': 14, 'style': css, 'tile': tile, 'overscan' : 0}
+    handler.body = {b'zoom': 14, b'style': css, b'tile': tile, b'overscan' : 0}
     handler.http_client = MockClient(css, xml)
     handler.style_host = str(host)
     handler.style_port = str(port)
 
-    handler.post()
+    await handler.post()
 
-    expected = """iVBORw0KGgoAAAANSUhEUgAAAQAAAAEACAYAAABccqhmAAABFUlEQVR4nO3BMQEAAADCoPVP7WsIoAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAeAMBPAABPO1TCQAAAABJRU5ErkJggg==""" # noqa
+    expected = b"""iVBORw0KGgoAAAANSUhEUgAAAQAAAAEACAYAAABccqhmAAABFUlEQVR4nO3BMQEAAADCoPVP7WsIoAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAeAMBPAABPO1TCQAAAABJRU5ErkJggg==""" # noqa
 
     assert handler.finished
     assert handler.was_written_b64() == expected
@@ -255,7 +257,8 @@ def test_render_handler(host, port):
 
 @given(text(alphabet=string.printable),
        text(alphabet=string.printable))
-def test_render_handler_no_xml(host, port):
+@pytest.mark.asyncio
+async def test_render_handler_no_xml(host, port):
     css = '#main{marker-line-color:#00C;marker-width:1}'
     layer = {
         "main": to_wkb("POINT(50 50)")
@@ -264,19 +267,19 @@ def test_render_handler_no_xml(host, port):
     tile = tile_encode(layer)
 
     handler = RenderStrHandler()
-    handler.body = {'zoom': 14, 'style': css, 'tile': tile, 'overscan': 32}
+    handler.body = {b'zoom': 14, b'style': css, b'tile': tile, b'overscan': 32}
     handler.http_client = MockClient(css, None)
     handler.style_host = str(host)
     handler.style_port = str(port)
 
     with raises(errors.ServiceError) as no_xml:
-        handler.post()
+        await handler.post()
 
     assert "style-renderer" in no_xml.value.message.lower()
 
 
 def test_render_png_ignores_bad_wkb():
-    expected = """iVBORw0KGgoAAAANSUhEUgAAAQAAAAEACAYAAABccqhmAAABLUlEQVR4nO3OQQkAIBQFwVfLQIYwmkE0j2YQ5F9mYO+bAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAL/ZI1qy+AErsduvVFwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAB8dAAgUwUoWSdR9gAAAABJRU5ErkJggg==""" # noqa
+    expected = b"""iVBORw0KGgoAAAANSUhEUgAAAQAAAAEACAYAAABccqhmAAABLUlEQVR4nO3OQQkAIBQFwVfLQIYwmkE0j2YQ5F9mYO+bAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAL/ZI1qy+AErsduvVFwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAB8dAAgUwUoWSdR9gAAAABJRU5ErkJggg==""" # noqa
 
     tile = {
         "main": to_wkb("POINT(50 50)") + ['INVALID']

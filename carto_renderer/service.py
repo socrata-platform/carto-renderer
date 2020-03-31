@@ -4,9 +4,9 @@ Service to render pngs from vector tiles using Carto CSS.
 """
 
 import json
-from urllib import quote_plus
+from urllib.parse import quote_plus
 
-from tornado import web
+from tornado import web, escape
 from tornado.httpclient import AsyncHTTPClient, HTTPRequest
 from tornado.ioloop import IOLoop
 from tornado.options import define, parse_command_line, options
@@ -49,8 +49,7 @@ def render_png(tile, _zoom, xml, overscan):
     box_max = TILE_SIZE + overscan - 1
     map_tile.zoom_to_box(mapnik.Box2d(box_min, box_min, box_max, box_max))
 
-    for (name, features) in tile.items():
-        name = name.encode('ascii', 'ignore')
+    for (name, features) in list(tile.items()):
         source = mapnik.MemoryDatasource()
         map_layer = mapnik.Layer(name)
         map_layer.datasource = source
@@ -103,10 +102,10 @@ class BaseHandler(web.RequestHandler):
         body = self.request.body
 
         try:
-            extracted = msgpack.loads(body)
+            extracted = msgpack.loads(body, raw=True)
         except Exception:
             logger.warn('Invalid message')
-            raise BadRequest('Could not parse message.', body)
+            raise BadRequest('Could not parse message.', escape.to_unicode(body))
         return extracted
 
     def _handle_request_exception(self, err):
@@ -119,13 +118,14 @@ class BaseHandler(web.RequestHandler):
         logger.exception(err)
         if isinstance(err, ServiceError):
             status_code = err.status_code
+            payload['message'] = err.message
             if err.request_body:
                 payload['request_body'] = err.request_body
         else:
+            payload['message'] = str(err)
             status_code = 500
 
         payload['resultCode'] = status_code
-        payload['message'] = err.message
 
         self.clear()
         self.set_status(status_code)
@@ -168,7 +168,7 @@ class RenderHandler(BaseHandler):
 
     Expects a dictionary with 'style', 'zoom', and 'tile' values.
     """
-    keys = ['tile', 'zoom', 'style']
+    keys = [b'tile', b'zoom', b'style']
 
     def initialize(self, http_client, style_host, style_port):
         """Magic Tornado __init__ replacement."""
@@ -176,8 +176,8 @@ class RenderHandler(BaseHandler):
         self.style_host = style_host    # pragma: no cover
         self.style_port = style_port    # pragma: no cover
 
-    @web.asynchronous
-    def post(self):
+#    @web.asynchronous
+    async def post(self):
         """
         Actually render the png.
 
@@ -192,7 +192,7 @@ class RenderHandler(BaseHandler):
             raise PayloadKeyError(self.keys, geobody)
         else:
             try:
-                overscan = int(geobody['overscan'])
+                overscan = int(geobody[b'overscan'])
             except:
                 logger.warn('Invalid JSON; overscan must be an integer: %s',
                             geobody)
@@ -200,7 +200,7 @@ class RenderHandler(BaseHandler):
                                  request_body=geobody)
 
             try:
-                zoom = int(geobody['zoom'])
+                zoom = int(geobody[b'zoom'])
             except:
                 logger.warn('Invalid JSON; zoom must be an integer: %s',
                             geobody)
@@ -210,9 +210,9 @@ class RenderHandler(BaseHandler):
             path = 'http://{host}:{port}/style?style={css}'.format(
                 host=self.style_host,
                 port=self.style_port,
-                css=quote_plus(geobody['style']))
+                css=quote_plus(geobody[b'style']))
 
-            tile = geobody['tile']
+            tile = geobody[b'tile']
 
             def handle_response(response):
                 """
@@ -228,7 +228,7 @@ class RenderHandler(BaseHandler):
 
                 logger.info('zoom: %d, num features: %d, len(xml): %d',
                             zoom,
-                            sum([len(layer) for layer in tile.values()]),
+                            sum([len(layer) for layer in list(tile.values())]),
                             len(xml))
                 logger.debug('xml: %s',
                              LogWrapper.Lazy(lambda: xml.replace('\n', ' ')))
@@ -241,7 +241,8 @@ class RenderHandler(BaseHandler):
                 else {}
 
             req = HTTPRequest(path, headers=headers)
-            self.http_client.fetch(req, callback=handle_response)
+            resp = await self.http_client.fetch(req)
+            handle_response(resp)
 
 
 def main():  # pragma: no cover

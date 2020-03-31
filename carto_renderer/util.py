@@ -34,7 +34,7 @@ class LogWrapper(object):
 
     def warn(self, *args):
         """Log a warning."""
-        self.underlying.warn(*args, extra=LogWrapper.ENV)
+        self.underlying.warning(*args, extra=LogWrapper.ENV)
 
     def error(self, *args):
         """Log an error."""

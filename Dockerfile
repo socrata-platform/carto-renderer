@@ -1,16 +1,18 @@
-FROM socrata/base-xenial
+FROM socrata/python3-bionic
 
 WORKDIR /app
 
 RUN DEBIAN_FRONTEND=noninteractive apt-get -y update && \
-    DEBIAN_FRONTEND=noninteractive apt-get -y install python-mapnik python-pip
-RUN pip install --upgrade pip 
+    DEBIAN_FRONTEND=noninteractive apt-get -y install python3-mapnik
 
 RUN mkdir -p /app/carto_renderer
 
 ENV LOG_LEVEL INFO
 
-ADD frozen.txt /app/
+COPY bin/freeze-reqs.sh /app/
+COPY dev-requirements.txt /app/
+RUN chmod +x /app/freeze-reqs.sh
+RUN /app/freeze-reqs.sh
 RUN pip install -r /app/frozen.txt
 
 COPY ship.d /etc/ship.d/

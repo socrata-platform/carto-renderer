@@ -11,20 +11,19 @@ if [ '--dev' = "$1" ]; then
     fi
     source venv/bin/activate
      
-    if [ ! -d venv/lib/python2.7/site-packages/mapnik ]; then
-        ln -s "$MAPNIK_DIR" venv/lib/python2.7/site-packages/
+    if [ ! -d venv/lib/python3.6/site-packages/mapnik ]; then
+        ln -s "$MAPNIK_DIR" venv/lib/python3.6/site-packages/
     fi
 
     pip install --upgrade --requirement dev-requirements.txt
     PYTHONPATH=. carto_renderer/service.py
 else
     bin/dockerize.sh
-    rm frozen.txt
-    
+
     if [ 'Darwin' = "$(uname)" ]; then
         OPTS=(-p 4096:4096 -e 'STYLE_HOST=docker.for.mac.localhost')
     else
-        OPTS=('--net=host')
+        OPTS=('--net=host' -e 'STYLE_HOST=localhost')
     fi
 
     docker run "${OPTS[@]}" -e STYLE_PORT=4097 -e LOG_LEVEL=INFO carto-renderer
