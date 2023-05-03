@@ -1,4 +1,4 @@
-FROM socrata/python3-bionic
+FROM socrata/python3-focal
 
 WORKDIR /app
 
