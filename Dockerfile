@@ -1,4 +1,4 @@
-FROM socrata/python3-focal
+FROM socrata/python-focal
 
 WORKDIR /app
 
