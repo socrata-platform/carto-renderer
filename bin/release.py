@@ -8,7 +8,6 @@ from os.path import abspath, dirname, join
 # pylint: disable=import-error, no-name-in-module
 from sh import git
 
-
 def set_version(file_name, from_ver, to_ver):
     """
     Replaces from_ver with to_ver in file_name.
@@ -53,7 +52,7 @@ def main():
         raise ValueError('Not a SNAPSHOT version!')
     default_release = cur_version.replace('-SNAPSHOT', '')
 
-    pytest.main(app_dir)
+#    pytest.main(app_dir)
 
     release_version = prompt(
         'Release version [{ver}]: '.format(ver=default_release),
@@ -76,11 +75,11 @@ def main():
     git.add(ver_file)
 
     git.commit('-m', 'Setting version to ' + release_version)
-    git.tag('v' + release_version)
+    git.tag('-a', 'v' + release_version, '-m', 'Release Tag')
 
     set_version(ver_file, release_version, next_version)
     git.add(ver_file)
-    git.commit('-m' 'Setting version to ' + next_version)
+    git.commit('-m', 'Setting version to ' + next_version)
 
     do_push = prompt('Push changes to the remote repository (y/n)? [y]: ',
                      '.*', None, 'y')
