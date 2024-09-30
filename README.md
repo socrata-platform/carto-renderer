@@ -41,3 +41,11 @@ bin/test.sh
 ```
 bin/dockerize.sh
 ```
+
+## Releasing ##
+
+To tag a release to be built and deployed to RC:
+
+1. Create a branch from main and run `bin/release.py`.
+1. Follow the prompts to bump the version, which will create two commits.
+1. Create a PR and get it merged to main.
