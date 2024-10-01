@@ -5,6 +5,7 @@ boolean isPr = env.CHANGE_ID != null
 String lastStage
 
 def dockerize = new com.socrata.Dockerize(steps, service, BUILD_NUMBER)
+def semVerTag = new com.socrata.SemVerTag(steps)
 
 pipeline {
   options {
@@ -32,14 +33,7 @@ pipeline {
       steps {
         script {
           lastStage = env.STAGE_NAME
-          String repoURL = sh(script: "git config --get remote.origin.url", returnStdout: true).trim()
-          String closestTag = sh(script: "git describe --abbrev=0", returnStdout: true).trim()
-          steps.checkout([$class: 'GitSCM',
-            branches: [[name: "refs/tags/${closestTag}"]],
-            extensions: [[$class: 'LocalBranch', localBranch: "**"]],
-            gitTool: 'Default',
-            userRemoteConfigs: [[credentialsId: 'pipelines-token', url: repoURL]]
-          ])
+          semVerTag.checkoutClosestTag()
         }
       }
     }
