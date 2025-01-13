@@ -1,4 +1,4 @@
-@Library('socrata-pipeline-library@sarahs/EN-71019/add-testing-and-build-args-to-common-pipeline') _
+@Library('socrata-pipeline-library@0.1.0') _
 
 Map pipelineParams = [
   defaultBuildWorker: 'build-worker',
