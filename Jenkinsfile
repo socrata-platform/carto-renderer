@@ -1,12 +1,20 @@
-@Library('socrata-pipeline-library@0.1.0') _
+@Library('socrata-pipeline-library@3.0.0') _
 
 Map pipelineParams = [
-  defaultBuildWorker: 'build-worker',
-  deploymentEcosystem: 'marathon-mesos',
-  language: 'python',
-  projectName: 'carto-renderer',
-  teamsChannelWebhookId: 'WORKFLOW_IQ',
-  testFilePath: 'bin/test.sh',
+    defaultBuildWorker: 'build-worker',
+    jobName: 'carto-renderer',
+    language: 'python',
+    paths: [
+        testExecutable: 'bin/test.sh',
+    ],
+    projects: [
+        [
+            name: 'carto-renderer',
+            deploymentEcosystem: 'marathon-mesos',
+            type: 'service',
+        ]
+    ],
+    teamsChannelWebhookId: 'WORKFLOW_IQ',
 ]
 
-commonServicePipeline(pipelineParams)
+commonPipeline(pipelineParams)
