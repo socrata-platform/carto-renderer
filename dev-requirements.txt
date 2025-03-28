@@ -1,9 +1,6 @@
-msgpack
-tornado
-asyncio
-
-hypothesis     # test
-mock           # test
-pytest         # test
-sh             # test
-pytest-asyncio # test
+# testing
+hypothesis
+mock
+pytest
+pytest-asyncio
+sh
