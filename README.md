@@ -22,8 +22,9 @@ sudo apt-get install python3-mapnik
 
 Install Python Dependencies:
 ```
-pip install -r dev-requirements.txt
+pip install -r dev-requirements.txt -r requirements.txt
 ```
+Note that production requirements are stored within a `requirements.txt`, whereas dependencies only used for development are stored within `dev-requirements.txt`.
 
 ## Start the Service ##
 ```
