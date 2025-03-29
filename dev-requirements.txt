@@ -4,3 +4,6 @@ mock
 pytest
 pytest-asyncio
 sh
+
+# security
+cyclonedx-py
