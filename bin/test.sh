@@ -17,7 +17,7 @@ if [ '--dev' = "$1" ]; then
         ln -s "$MAPNIK_DIR" venv/lib/python2.7/site-packages/
     fi
 
-     pip install --upgrade --requirement dev-requirements.txt
+     pip install --upgrade --requirement dev-requirements.txt --requirement requirements.txt
      PYTHONPATH=. py.test -v carto_renderer
 else
     DOCKER_BUILDKIT=1 docker build \

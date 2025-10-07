@@ -1,9 +1,9 @@
-msgpack
-tornado
-asyncio
+# testing
+hypothesis
+mock
+pytest
+pytest-asyncio
+sh
 
-hypothesis     # test
-mock           # test
-pytest         # test
-sh             # test
-pytest-asyncio # test
+# security
+cyclonedx-py
