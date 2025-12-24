@@ -1,4 +1,6 @@
-# Carto Test Service #
+# [ARCHIVED] Carto Test Service #
+*NOTE* As of December 2025 this service is deprecated.
+
 This is a service that's a proof of concept for getting a service that
 renders vector tiles into images using CartoCSS.
 
