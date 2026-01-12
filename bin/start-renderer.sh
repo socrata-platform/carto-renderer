@@ -15,7 +15,7 @@ if [ '--dev' = "$1" ]; then
         ln -s "$MAPNIK_DIR" venv/lib/python3.6/site-packages/
     fi
 
-    pip install --upgrade --requirement dev-requirements.txt
+    pip install --upgrade --requirement dev-requirements.txt --requirement requirements.txt
     PYTHONPATH=. carto_renderer/service.py
 else
     bin/dockerize.sh
