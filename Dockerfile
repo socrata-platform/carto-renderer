@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 
-FROM socrata/python-focal AS base
+FROM socrata/python-focal:3.11 AS base
 
 WORKDIR /app
 
